@@ -13,6 +13,8 @@
 #' @export
 getTremololist<-function(what,lsp2exp,file2exp=NULL,perclim=0.1,nmin=5,exec='/media/D01/Metabo/MetSoft/Tremolo_8_21_2013/convert'){
   
+  if(!"ddaSet"%in%class(what)) stop("Error: not a ddaSet object")
+  
   toexp=alladd=list()
   iix=0
   for(i in 1:length(lsp2exp)){
@@ -22,8 +24,8 @@ getTremololist<-function(what,lsp2exp,file2exp=NULL,perclim=0.1,nmin=5,exec='/me
     m[,"y"]=round(100*m[,"y"]/max(m[,"y"]),4)
     m=m[m[,2]>=perclim,,drop=F]
     if(nrow(m)<nmin) next
-    toadd=what$MS2Infos[which(what$MS2ClInfos$Win==isp),c("PrecMZ","RT","PrecInt","Win")]
-    if(!is.null(what$MS2ClInfos)) toadd=what$MS2ClInfos[which(what$MS2ClInfos$Win==isp),c("MZ","RT","He","Win")]
+    toadd=what$MS2Infos[which(what$MS2ClInfos$SpId==isp),c("PrecMZ","RT","PrecInt","SpId")]
+    if(!is.null(what$MS2ClInfos)) toadd=what$MS2ClInfos[which(what$MS2ClInfos$SpId==isp),c("MZ","RT","He","SpId")]
     for(j in 1:nrow(toadd)){
       iix=iix+1
       alladd[[iix]]=cbind(SCANS=iix,toadd[j,])

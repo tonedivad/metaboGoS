@@ -96,7 +96,7 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   if(softtype=="ReAdW") suppressWarnings(ascan$collisionEnergy<-as.numeric(gsub(".*@([a-z]+)([0-9\\.]+) .*","\\2",ascan$filterLine)))
   
   ###
-  ascan$ScMS1=ascan$Win=NA
+  ascan$ScMS1=ascan$SpId=NA
   l=which(ascan$ScanMode=="Scan")
   for(i in 1:length(l)) ascan$ScMS1[l[i]]=i
   for(i in which(is.na(ascan$ScMS1))) ascan$ScMS1[i]=ascan$ScMS1[i-1]
@@ -105,8 +105,8 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   
   ### name windows
   toadd=ifelse(useSid,paste0("-",sid),"")
-  ascan$Win=sprintf("%.4f@%.3f%s",ascan$precursorMz,ascan$retentionTime,toadd)
-  ascan$Win[l]=sprintf("FS@%.3f%s",ascan$retentionTime[l],toadd)
+  ascan$SpId=sprintf("%.4f@%.3f%s",ascan$precursorMz,ascan$retentionTime,toadd)
+  ascan$SpId[l]=sprintf("FS@%.3f%s",ascan$retentionTime[l],toadd)
   
   ### Load MS2
   tmp=mzR::openMSfile(cefi)
@@ -128,21 +128,21 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   ## MS2
   l=which(ascan$ScanMode=="ProductIon")
   infms2=ascan[l,]
-  MS2Dat=tapply(1:nrow(infms2),infms2$Win,function(x) do.call("rbind",apks[infms2$num[x]]))
+  MS2Dat=tapply(1:nrow(infms2),infms2$SpId,function(x) do.call("rbind",apks[infms2$num[x]]))
   
-  lv1=c("num" , "ScMS1","Win", "msLevel","retentionTime","polarity","activationMethod","collisionEnergy",  'windowWideness',"lowMz","highMz", 
+  lv1=c("num" , "ScMS1","SpId", "msLevel","retentionTime","polarity","activationMethod","collisionEnergy",  'windowWideness',"lowMz","highMz", 
         "precursorCharge","precursorMz","precursorIntensity" ,"basePeakIntensity"  ,"totIonCurrent")
   
-  lv2=c("Sc" , "ScMS1","Win", "msLevel","RT","Polarity","activationMethod","CE",   'WinSize',"lowMz","highMz",
+  lv2=c("Sc" , "ScMS1","SpId", "msLevel","RT","Polarity","activationMethod","CE",   'WinSize',"lowMz","highMz",
         "PrecCharge","PrecMZ","PrecInt" ,"BPInt"  ,"TIC")
   
   MS2Infos=infms2[,lv1]
   names(MS2Infos)=lv2
-  rownames(MS2Infos)=infms2$Win
+  rownames(MS2Infos)=infms2$SpId
   
   ###### Finalise
   
-  if(verbose) cat(' -- final number of MS2 spectra ', nrow(MS2Infos) ," within ",sprintf('%.3f-%.3f',min(MS2Infos$RT),max(MS2Infos$RT))," min. range\n",sep="")
+  if(verbose) cat(' --> Final number of MS2 spectra: ', nrow(MS2Infos) ," between ",sprintf('%.3f-%.3f',min(MS2Infos$RT),max(MS2Infos$RT))," min.\n",sep="")
   
   ##  ##  ##  ## Scan2rt
   msinfos=mzR:::header(tmp)

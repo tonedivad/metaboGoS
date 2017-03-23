@@ -1,11 +1,15 @@
-#' Convert CFM file to MGF
-#'
-#' This function loads a
+#' @name CFM
+#' @aliases Cfm2Mgf
+#' @aliases ManyCfm2Mgf
+#' 
+#' @title Convert CFM file to MGF
+#' some stufff
 #'
 #' @param ifile Path to the input file
 #' @param itmp Path to the input file
 #' @param minpk Path to the input file
 #' @return List of list
+#' @rdname CFM
 #' @export
 Cfm2Mgf<-function(ifile,itmp,minpk=3){
   
@@ -69,11 +73,9 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
   }
   invisible(list(itmp['Id'],llexp))
 }
+#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### 
 
-
-#' Multiple CFM file to MGF
-#'
-#' This function loads a
+#' @rdname CFM
 #'
 #' @param mf2exp Data frame
 #' @param what Path to the input file

@@ -10,6 +10,8 @@ runTremolo(root, speclib, prectol = 0.1, score = 0.4, topk = 10,
 \arguments{
 \item{root}{Directory to store the results}
 
+\item{speclib}{Spectra lib in .mgf format}
+
 \item{prectol}{Precursor tolerance}
 
 \item{score}{Minimum score}
