@@ -5,6 +5,7 @@
 #' @param cefi Path to the input file
 #' @param sid Sample id to given 
 #' @param add2File Additional information to complement the file infos
+#' @param defIsolation Default isolation window around precursor
 #' @param save Save FALSE/TRUE
 #' @param outfile Filename to save
 #' @param stype Sample type
@@ -12,10 +13,10 @@
 #' @param verbose Print stuff out
 #' @param useSid Add sid to the spectra names
 #' @param rtlim Limit MS/MS to a certain range
-#' @param MinIntBP Minimum MS/MS basepeak  height
+##' @param MinIntBP Minimum MS/MS basepeak  height
 #' @return List of list
 #' @export
-parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=NA,roundmz=6,verbose=T,useSid=FALSE,rtlim=c(-Inf,Inf),MinIntBP=1000){
+parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,outfile=NULL,stype=NA,roundmz=6,verbose=T,useSid=FALSE,rtlim=c(-Inf,Inf)){
   
   # sid=NULL;stype=NA;method="qn";roundmz=5;winsize=0.51;dppm=30;dmz=0.01;verbose=T;save=FALSE;outfile=NULL;useSid=FALSE;rtlim=c(.6,14.5);MinIntBP=1000
   
@@ -105,7 +106,7 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   
   ### name windows
   toadd=ifelse(useSid,paste0("-",sid),"")
-  ascan$SpId=sprintf("%.4f@%.3f%s",ascan$precursorMz,ascan$retentionTime,toadd)
+  ascan$SpId=sprintf("SP%.4f@%.3f%s",ascan$precursorMz,ascan$retentionTime,toadd)
   ascan$SpId[l]=sprintf("FS@%.3f%s",ascan$retentionTime[l],toadd)
   
   ### Load MS2
@@ -121,8 +122,9 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   #### Reduce based on RT/minInt MS2
   lsp=range(ascan$ScMS1[ascan$retentionTime>=rtlim[1] & ascan$retentionTime<=rtlim[2] & ascan$ScanMode=="Scan"])
   l2use=which(ascan$ScMS1%in%(lsp[1]:lsp[2]))
-  l2excl=which(ascan$BPInt<MinIntBP & ascan$ScanMode=="ProductIon")
-  if(length(l2excl)>0) l2use=l2use[!l2use%in%l2excl]
+#  l2excl=which(ascan$BPInt<MinIntBP & ascan$ScanMode=="ProductIon")
+  # l2excl=which(ascan$ScanMode=="ProductIon")
+  # if(length(l2excl)>0) l2use=l2use[!l2use%in%l2excl]
   ascan=ascan[l2use,]
   
   ## MS2
@@ -138,15 +140,17 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,save=FALSE,outfile=NULL,stype=
   
   MS2Infos=infms2[,lv1]
   names(MS2Infos)=lv2
+  MS2Infos$WinSize[which(is.na(MS2Infos$WinSize))]=defIsolation
+  MS2Infos$WinSize=as.numeric(MS2Infos$WinSize)
   rownames(MS2Infos)=infms2$SpId
-  
-  ###### Finalise
+
+    ###### Finalise
   
   if(verbose) cat(' --> Final number of MS2 spectra: ', nrow(MS2Infos) ," between ",sprintf('%.3f-%.3f',min(MS2Infos$RT),max(MS2Infos$RT))," min.\n",sep="")
   
   ##  ##  ##  ## Scan2rt
   msinfos=mzR:::header(tmp)
-  sc2rt=round(msinfos$retentionTime/60,4)
+  sc2rt=round(msinfos$retentionTime/60,5)
   Scan2rt=matrix(sc2rt,nrow=1,dimnames = list(sid,1:length(sc2rt)))
   
   ##  ##  ##  ##

@@ -4,9 +4,9 @@
 \alias{parseOneDDA}
 \title{Load DDA run from a mzXML file}
 \usage{
-parseOneDDA(cefi, sid = NULL, add2File = NULL, save = FALSE,
-  outfile = NULL, stype = NA, roundmz = 6, verbose = T,
-  useSid = FALSE, rtlim = c(-Inf, Inf), MinIntBP = 1000)
+parseOneDDA(cefi, sid = NULL, add2File = NULL, defIsolation = 0.501,
+  save = FALSE, outfile = NULL, stype = NA, roundmz = 6, verbose = T,
+  useSid = FALSE, rtlim = c(-Inf, Inf))
 }
 \arguments{
 \item{cefi}{Path to the input file}
@@ -14,6 +14,8 @@ parseOneDDA(cefi, sid = NULL, add2File = NULL, save = FALSE,
 \item{sid}{Sample id to given}
 
 \item{add2File}{Additional information to complement the file infos}
+
+\item{defIsolation}{Default isolation window around precursor}
 
 \item{save}{Save FALSE/TRUE}
 

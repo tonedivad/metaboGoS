@@ -9,8 +9,7 @@ some stufff}
 \usage{
 Cfm2Mgf(ifile, itmp, minpk = 3)
 
-ManyCfm2Mgf(mf2exp, what = "Neg", fileout = NULL,
-  root = "/media/david/ef81e301-125c-45e8-8e74-9ed5bbd3fd3b/CFM")
+ManyCfm2Mgf(mf2exp, what = "Neg", fileout = NULL, root)
 }
 \arguments{
 \item{ifile}{Path to the input file}

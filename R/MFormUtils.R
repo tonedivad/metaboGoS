@@ -5,26 +5,28 @@
 #'
 #' Interface to Sirus
 #'
-#' @param precmz MS1 spectra
+#' @param precmz Precursor M/Z
 #' @param ms1spec MS1 spectra
 #' @param ms2spec MS/MS spectra
 #' @param ionProd Ionisation product
 #' @param ppmPrecMF ppmPrecMF
 #' @param maxMF Maximum number of MF to be returned
 #' @param limint Minimum intensity perc.
-#' @param exec Sirius executable
-#' @param tempdir Directory containing the output
 #' @param listmf Annotation of a single list of mol formula
 #' @param retAnn Add annotation in the original MS/MS
+#' @param exec Sirius executable
+#' @param tempdir Directory containing the output
+#' @param basenam result file name
 #' @param clean  clean-up the mess
 #' @return List of stuff
 #' @export
 getMF.sirius<-function(precmz=NULL,ms1spec=NULL,ms2spec=NULL,ionProd="[M+H]1+",ppmPrecMF=11,maxMF=NA,limint=10^-5,
-                     exec="/media/D01/Metabo/MetSoft/sirius3.4.1/bin/sirius3",tempdir="./",listmf=c(),retAnn=FALSE,clean=TRUE){
+                      listmf=c(),retAnn=FALSE,
+                     exec="/media/D01/Metabo/MetSoft/sirius3.4.1/bin/sirius3",
+                     tempdir="./",basenam=paste0("tmp",round(runif(1)*1000)),clean=TRUE){
   
   ### Set tempfiles
-  basename=paste0("tmp",round(runif(1)*1000))
-  ifile=paste0(tempdir,"/",basename,".ms")
+  ifile=paste0(tempdir,"/",basenam,".ms")
   
   allre=allann=list()
   rematch= data.frame("PrecMZ"=double(),"Mass"=double(),"PPM"=double(),
@@ -54,7 +56,7 @@ getMF.sirius<-function(precmz=NULL,ms1spec=NULL,ms2spec=NULL,ionProd="[M+H]1+",p
       if(length(listmf)==0)   args0=c(args0,paste0("-c ",ifelse(is.na(maxMF),ceiling(precmz),maxMF)))
       if(length(listmf)>0 | retAnn){
         retAnn=TRUE
-        outdir=paste0(tempdir,"/",basename,"anndir")
+        outdir=paste0(tempdir,"/",basenam,"anndir")
         if(!dir.exists(outdir)) dir.create(outdir)
         if(length(listmf)>0) args0=c(paste0("-f ",paste(listmf,collapse = " ")),args0)
         args0=c(args0,paste0("-o ",outdir))
@@ -79,7 +81,7 @@ getMF.sirius<-function(precmz=NULL,ms1spec=NULL,ms2spec=NULL,ionProd="[M+H]1+",p
     
        if(retAnn){
         
-        lfiles=list.files(paste0(outdir,"/1_",basename,"_",cmpdnam,"/spectra"),full.names = T)
+        lfiles=list.files(paste0(outdir,"/1_",basenam,"_",cmpdnam,"/spectra"),full.names = T)
         df=lapply(lfiles,function(ifi){
           df=data.frame(read.table(ifi,sep="\t",header=T))
           df=df[match(1:nrow(ms2spec),apply(abs(outer(ms2spec[,"mz"],df$mz,"-")),2,which.min)),c("explanation","exactmass")]

@@ -1,23 +1,188 @@
-#' @name extractPI
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' @name refinePIRoi
+#' @title refine PI ROI
+#' 
+#' Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors
+#'
+#' @param obj metaboGoS obj
+#' @param parDeco deconvolution parameter list
+#' @param refFct refining function
+#' @param doPlot plotting at each step
+#' @param nSlaves number of slaves for parallel
+#' @import foreach
+#' @import doParallel
+#' @return metaboGoS obj with RoiInfos / PeakInfos /params
+#' @export
+refinePIRoi<-function(obj,
+                       parDeco=list(span=7,bw=0.01,minNoiseMS1=10000),
+                       refFct=metaboGoS:::.MGrefFct0,doPlot=TRUE,
+                       nSlaves=1){
+  
+  ## minPIwindow=0.05;PIweight=2;nSlaves=10
+  if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
+  
+  strt=as.integer(as.POSIXct( Sys.time() ))
+  
+  ########  ########  ########
+  oparDeco=obj$parDeco
+  if(!is.null(oparDeco))  for(i in names(oparDeco)[!names(oparDeco)%in%parDeco]) parDeco[[i]]=oparDeco[[i]]
+  
+  xr=xcmsRaw(obj$File$File,includeMSn = FALSE)
+  #cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
+  sc2rt=round(xr@scantime/60,5)
+  
+  psdrt=ifelse(is.null(parDeco$psdrt),NA,parDeco$psdrt)
+  if(is.na(psdrt)) psdrt=parDeco$psdrt=quantile(sc2rt/60,.1)
+  
+  minRTwin=ifelse(is.null(parDeco$minRTwin),NA,parDeco$minRTwin)
+  if(is.na(minRTwin)) parDeco$minRTwin=minRTwin=quantile(diff(xr@scantime/60),.9)+2.1*psdrt ## set it to near largest delta rt + 2*psdrt
+  
+  linpardeco=c("ppm","dmz","psdrt","drt","rtlim","minHeightMS1","minNoiseMS1", "minZero","minRTwin","span","bw" )
+  lmiss=linpardeco[!linpardeco%in%names(parDeco)]
+  if(length(lmiss)) stop(paste0('Missing parameters: ',paste(lmiss,sep=" ")))
+  
+  ROImat=obj$RoiInfos
+  if(is.null(ROImat)) stop('Matrix defing ROI is missing!')
+  ########  ########  ########
+  
+  ###################### Refine frames
+  llre=list()
+  ll=obj$RoiInfos$RoiId#[111:120]
+
+  if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
+  if(nSlaves>1){
+    clProc<-makeCluster(nSlaves)
+    registerDoParallel(clProc)
+    cat(" -- registering ",nSlaves," clusters\n",sep="")
+  }
+
+   ### Parallele bit
+  if(nSlaves>1)
+    #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
+      llre=foreach(idx = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
+        lmz=range(ROImat[idx,c("mzmin","mzmax")])
+        lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
+        eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
+        if(sum(!is.na(eic[,"y"]))<2) return(list())
+        if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) return(list())
+        re=refFct(eic,parDeco,idx,doPlot = FALSE)
+        if(is.null(re)) return(list())
+        re
+    }
+  ## Serial bit
+  lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+  if(nSlaves<=1) for(idx in ll){
+    if(idx %in% lperc) cat(idx," ")
+    lmz=range(ROImat[idx,c("mzmin","mzmax")])
+    lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
+    eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
+    if(sum(!is.na(eic[,"y"]))<2) next
+    if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) next
+    re=refFct(eic,parDeco,idx,doPlot = doPlot)
+    if(is.null(re)) next
+    llre=c(llre,list(re))
+  }
+
+  if(nSlaves>1) stopCluster(clProc)
+
+  ## combine results
+  ares=do.call("rbind",llre[sapply(llre,length)>0])
+  ares$rtmin[ares$rtmin<parDeco$rtlim[1]]=parDeco$rtlim[1]
+  ares$rtmax[ares$rtmax>parDeco$rtlim[4]]=parDeco$rtlim[4]
+  ares$roi0=ares$roi
+  ares$roi=paste(ares$roi,ares$subroi,sep=";")
+  cat(" -- number of Peaks/ROIs after refinement: ",nrow(ares)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
+  
+  lvar=c('roi',"rtmin","rtmax","rt","mz50","mz10","mz90", "mz","intensity" ,"mzmin","mzmax")
+  ROImat2=ares[tapply(1:nrow(ares),ares$roi,function(x) x[which.max(ares[x,"intensity"])]),lvar,drop=F]
+  l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & abs(ROImat2[,"rtmax"]-ROImat2[,"rtmin"])>=parDeco$minRTwin &
+              ROImat2[,"rtmin"]<=parDeco$rtlim[4] & ROImat2[,"rtmax"]>=parDeco$rtlim[1])
+  ROImat2=ROImat2[l2k,,drop=F]
+  ROImat2=ROImat2[order(ROImat2[,'mz50'],ROImat2[,"rtmin"]),,drop=F]
+  ROImat2$RoiId=rownames(ROImat2)=sprintf("R%.4f@%.1f-%.1f",ROImat2[,"mz50"],ROImat2[,"rtmin"],ROImat2[,"rtmax"])
+  
+  ## merge peaks
+  ares$RoiId=ROImat2$RoiId[match(ares$roi,ROImat2$roi)]
+  lvar=unique(c('RoiId',"pk.cl",names(ares)[c(grep("pk\\.",names(ares)),grep("ap\\.",names(ares)))]))
+  PKmat=ares[,lvar]
+  PKmat=PKmat[order(PKmat[,'ap.mz'],PKmat[,"pk.loc"]),,drop=F]
+  PKmat$PkId=rownames(PKmat)=sprintf("%.4f@%.3f",PKmat$ap.mz,PKmat$pk.loc)
+ 
+  ###########################
+  ### Associate MS/MS to ROI
+  ## !! recompute the exact values of the precursors
+  oMS2ROI=obj$MS2toMS1
+  oMS2ROI$OldRoiId=oMS2ROI$RoiId
+  llsplit=split(1:nrow(oMS2ROI), ceiling(seq_along(1:nrow(oMS2ROI))/200))
+  Roi2sp=do.call("rbind",lapply(llsplit,function(x){
+    ddmz=outer(oMS2ROI$mzPrec[x],ROImat2[,"mzmin"],"-")>=(-parDeco$dmz/2) & outer(oMS2ROI$mzPrec[x],ROImat2[,"mzmax"],"-")<=(parDeco$dmz/2) ## slight padding zeros instaeds?
+    ddrt=outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmin"],"-")>=0 & outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmax"],"-")<=0
+    re=which(ddrt & ddmz,arr=T)
+    re[,1]=x[re[,1]]
+    re}))
+  # col: ROImat2, row=oMS2ROI
+  nMS2ROI=oMS2ROI[Roi2sp[,"row"],]
+  nMS2ROI$RoiId=ROImat2$RoiId[Roi2sp[,"col"]]
+  
+  ### Add Peak to spectra
+  nMS2ROI$PkId=nMS2ROI$RoiPkCl=NA
+  llsplit=tapply(1:nrow(nMS2ROI),nMS2ROI$RoiId,c)
+  Pk2sp=do.call("rbind",lapply(llsplit,function(x){
+    iroi=nMS2ROI$RoiId[x][1]
+    l=which(PKmat$RoiId==iroi)
+    if(length(l)==0) return(NULL)
+    re=which(outer(nMS2ROI$rtPrec[x],PKmat$pk.left[l],"-")>=0 & outer(nMS2ROI$rtPrec[x],PKmat$pk.right[l],"-")<=0,arr=T)
+    re[,1]=x[re[,1]]
+    re[,2]=l[re[,2]]
+    re}))
+  # col: peak, row=nMS2ROI
+  
+  fMS2ROI=nMS2ROI[Pk2sp[,1],c("SpId","RoiId","RoiPkCl",'PkId',"PInt","yPrec","mzPrec", "rtPrec")]
+  fMS2ROI$PkId=PKmat$PkId[Pk2sp[,2]]
+  fMS2ROI$RoiPkCl=PKmat$pk.cl[Pk2sp[,2]]
+  l2add=which(!(1:nrow(nMS2ROI))%in%Pk2sp[,1])
+  if(length(l2add)) fMS2ROI=rbind(fMS2ROI,nMS2ROI[l2add,c("SpId","RoiId","RoiPkCl",'PkId',"PInt","yPrec","mzPrec", "rtPrec")])
+  fMS2ROI=fMS2ROI[order(fMS2ROI$mzPrec,fMS2ROI$rtPrec,fMS2ROI$RoiId,fMS2ROI$PkId),]
+  rownames(fMS2ROI)=NULL
+ 
+  cat(" --> Final number of ROIs: ",nrow(ROImat2)," assoc. to ",length(unique(fMS2ROI$SpId)),"/",nrow(obj$MS2Infos)," MS/MS\n",
+      " --> Final number of peaks: ",nrow(PKmat)," assoc. to ",length(unique(fMS2ROI$SpId[!is.na(fMS2ROI$PkId)])),"/",nrow(obj$MS2Infos)," MS/MS",
+      " [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
+  
+  lvar=c( "PkId", "pk.cl" , "RoiId" )
+  PKmat=PKmat[,c(lvar,names(PKmat)[!names(PKmat)%in%lvar])]
+  names(PKmat)[2]="RoiPkCl"
+  
+  obj$RoiInfos=ROImat2
+  obj$PeakInfos=PKmat
+  obj$MS2toMS1=fMS2ROI
+  obj$parDeco=parDeco
+  class(obj) = unique(append(class(obj), "ddaSet"))
+  invisible(obj)
+}
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' @name extractPIRoi
 #' @title Extract ROI around spectra
 #' 
-#' some stufff
+#' Fast association of spectra to ROIs from potential precursors
 #'
 #' @param obj metaboGoS obj
 #' @param parDeco deconvolution parameter list
 #' @param minPIwindow window size in min. around the spectra
 #' @param PIweight weighting
-#' @param nSlaves number of slaves for parallel
+###' @param nSlaves number of slaves for parallel
 #' @import foreach
 #' @import doParallel
-#' @return List of stuf
+#' @return metaboGoS obj with RoiInfos / MS2ROI /params
 #' @export
-extractPI<-function(obj,
+extractPIRoi<-function(obj,
                     parDeco=list(minPurity=c(0.2,0.4),
-                         ppm=5,dmz=0.001,
+                         ppm=5,dmz=0.001,psdrt=NA,
                          drt=1,rtlim=c(-Inf,-Inf,Inf,Inf),
-                         minHeightMS1=100000,minNoiseMS1=10000,minZero=200),
-                    minPIwindow=NA,PIweight=2,nSlaves=1){
+                         minHeightMS1=100000,minZero=200),
+                    minPIwindow=NA,PIweight=2){
   
   ## minPIwindow=0.05;PIweight=2;nSlaves=10
   if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
@@ -29,13 +194,28 @@ extractPI<-function(obj,
   cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
   
   sc2rt=round(xr@scantime/60,5)
-  drt=quantile(diff(xr@scantime/60),.1)
-  if(is.na(minPIwindow)) minPIwindow=quantile(diff(xr@scantime/60),9)+drt ## set it to near largest delta rt + drt
+  psdrt=ifelse(is.null(parDeco$psdrt),NA,parDeco$psdrt)
+  if(is.na(psdrt)) psdrt=parDeco$psdrt=quantile(sc2rt/60,.1)
   
-  ### Get potential precursor within minPIwindow of the spectra
+  if(is.na(minPIwindow)) minPIwindow=quantile(diff(xr@scantime/60),.9)+2.1*psdrt ## set it to near largest delta rt + 2*psdrt
+  parDeco$minRTwin=minRTwin=minPIwindow
+  
+  if(any(is.na(ms2inf$WinSize))) stop('Please set the delta m/z around precursor ions')
+  
+  rtlim=parDeco$rtlim
+  rtlim[which(rtlim>max(sc2rt))]=max(sc2rt)
+  rtlim[which(rtlim<min(sc2rt))]=min(sc2rt)
+  parDeco$rtlim=rtlim
+  
+  ##### Check
+  linpardeco=c("minPurity" ,   "ppm","dmz","psdrt","drt","rtlim","minHeightMS1", "minZero","minRTwin" )
+  lmiss=linpardeco[!linpardeco%in%names(parDeco)]
+  if(length(lmiss)) stop('Missing parameters:',paste(lmiss,sep=" "))
+
+  ### Get potential precursor within minRTwin of the spectra
   amzrt=do.call("rbind",lapply(1:nrow(ms2inf),function(ipmz) {
-    scrange=range(which(abs(sc2rt-sc2rt[ms2inf[ipmz,"ScMS1"]])<=minPIwindow))
-    re=GRMeta:::.GRrawMat(xr,scanrange=scrange,mzrange=ms2inf[ipmz,]$PrecMZ+c(-1,1)*(parDeco$winMS2+parDeco$dmz))
+    scrange=range(which(abs(sc2rt-sc2rt[ms2inf[ipmz,"ScMS1"]])<=minRTwin))
+    re=GRMeta:::.GRrawMat(xr,scanrange=scrange,mzrange=ms2inf[ipmz,]$PrecMZ+c(-1,1)*(ms2inf[ipmz,]$WinSize+parDeco$dmz))
     if(nrow(re)==0) return(NULL)# return(c(PInt=NA,MZ=NA,SBR=NA,CodaWide=NA))
     we=.MGgetMZweight(re[,"mz"]-ms2inf[ipmz,]$PrecMZ,PIweight)
     re[,"y"]=re[,"y"]*we
@@ -57,26 +237,26 @@ extractPI<-function(obj,
   ### merge wide m/z/RT windows
   ROImat1=lapply(1:nrow(ROImat),function(ix){
     xroi=ROImat[ix,]
-    lmz=range(c(xroi[c(1,1,2,3)]*(1+1*c(-2,2,-1,1)*parDeco$ppm*10^-6),xroi[2:3]+c(-1,1)*parDeco$dmz))+c(-1.1,1.1)*parDeco$dmz ## very large window!!
-    lrt=xroi[4:5]+c(-1,1)*parDeco$drt
-    xr=rawEIC(xr, mzrange =lmz)#, rtrange = lrt*60)
-    l=which(xr$intensity>=parDeco$minZero)
-    ll=GRMeta:::.GRsplist(sc2rt[l],l,d=parDeco$drt*2+2.1*drt)
+    lmz=range(c(xroi[c( "mz","mz","mzmin", "mzmax")]*(1+1*c(-2,2,-1,1)*parDeco$ppm*10^-6),xroi[c("mzmin", "mzmax")]+c(-1,1)*parDeco$dmz))+c(-1.1,1.1)*parDeco$dmz ## very large window!!
+    lrt=range(xroi[c( "rtmin","rtmax")])+c(-1,1)*parDeco$drt
+    ieic=xcms::rawEIC(xr, mzrange =lmz, rtrange = lrt*60)
+    l=which(ieic$intensity>=parDeco$minZero)
+    ll=GRMeta:::.GRsplist(sc2rt[l],l,d=parDeco$drt*2+2.1*psdrt)
     do.call("rbind",lapply(ll,function(x){ 
-      newx=sc2rt[range(xr$scan[x])]+c(-1,1)*(parDeco$drt)
-      #x2=x[xr$scan[x]>=rangeSc[2] & xr$scan[x]<=rangeSc[3]]
-      #if(length(x2)<1) return(c(xroi[1],lmz[1],lmz[2],newx,0,0,0))
-      aprt=xr$scan[x[which.max(xr$intensity[x])]]
-      return(c(xroi[1],lmz[1],lmz[2],newx,diff(newx),max(xr$intensity[x]),sc2rt[aprt]))
+      newx=sc2rt[range(ieic$scan[x])]+c(-1,1)*(parDeco$drt)
+      #x2=x[ieic$scan[x]>=rangeSc[2] & ieic$scan[x]<=rangeSc[3]]
+      #if(length(x2)<1) return(c(ieicoi[1],lmz[1],lmz[2],newx,0,0,0))
+      aprt=ieic$scan[x[which.max(ieic$intensity[x])]]
+      return(c(xroi[1],lmz[1],lmz[2],newx,diff(newx),max(ieic$intensity[x]),sc2rt[aprt]))
     }))
   })
   ROImat1=do.call("rbind",ROImat1)
   colnames(ROImat1)=c(colnames(ROImat),"drt","intensity","aprt")
   
-  l2k=which(ROImat1[,"intensity"]>=parDeco$minHeightMS1 & ROImat1[,"drt"]>=minPIwindow & ROImat1[,"rtmin"]<=parDeco$rtlim[4] & ROImat1[,"rtmax"] >= parDeco$rtlim[1])
+  l2k=which(ROImat1[,"intensity"]>=parDeco$minHeightMS1 & ROImat1[,"drt"]>=minRTwin & ROImat1[,"rtmin"]<=rtlim[4] & ROImat1[,"rtmax"] >= rtlim[1])
   ROImat1=ROImat1[l2k,]
-  ROImat1[ROImat1[,"rtmin"]<=parDeco$rtlim[1],"rtmin"]=parDeco$rtlim[1]
-  ROImat1[ROImat1[,"rtmax"]>=parDeco$rtlim[4],"rtmax"]=parDeco$rtlim[4]
+  ROImat1[ROImat1[,"rtmin"]<=rtlim[1],"rtmin"]=rtlim[1]
+  ROImat1[ROImat1[,"rtmax"]>=rtlim[4],"rtmax"]=rtlim[4]
   
   ### Combine dupl -> remerge retention time -> could be improved!?!
   llover=GRMeta:::.GRisover(ROImat1[,"mzmin"],ROImat1[,"mzmax"],retOne = T)
@@ -87,64 +267,16 @@ extractPI<-function(obj,
   }))
   colnames(ROImat2)=colnames(ROImat1)
   ROImat2[,"drt"]=ROImat2[,"rtmax"]-ROImat2[,"rtmin"]
-  l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & ROImat2[,"drt"]>=minPIwindow & ROImat2[,"rtmin"]<=parDeco$rtlim[4] & ROImat2[,"rtmax"]>=parDeco$rtlim[1])
+  l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & ROImat2[,"drt"]>=minRTwin & ROImat2[,"rtmin"]<=rtlim[4] & ROImat2[,"rtmax"]>=rtlim[1])
   ROImat2=ROImat2[l2k,]
   
   cat(" -- found: ",nrow(ROImat2)," potential ROIs [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
-  
-  ####################### Refine frames
-  llre=list()
-  ll=1:nrow(ROImat2)
-  
-  if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
-  if(nSlaves>1){
-    clProc<-makeCluster(nSlaves)
-    registerDoParallel(clProc)
-    cat(" -- registering ",nSlaves," clusters\n",sep="")
-  }
-  
-   ### Parallele bit
-  if(nSlaves>1) 
-    #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
-      llre=foreach(i = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
-        lmz=range(ROImat2[i,c("mzmin","mzmax")])
-      lrt=range(ROImat2[i,c("rtmin","rtmax")])*60
-      eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt,padsc =F)
-      if(nrow(eic)<2) return(list())
-      if(max(eic[,"y"])<parDeco$minHeightMS1) return(list())
-      re=.MGrefineROIs(eic,parDeco,minRTwin = minPIwindow,drt=drt)
-      if(is.null(re)) return(list())
-      cbind(id=i,re)
-    }
-  ## Serial bit
-  lperc=round(seq(1,nrow(ROImat2),length=12)[2:11])
-  if(nSlaves<=1) for(i in ll){
-    if(i %in% lperc) cat(i," ")
-    lmz=range(ROImat2[i,c("mzmin","mzmax")])
-    lrt=range(ROImat2[i,c("rtmin","rtmax")])*60
-    eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt,padsc =F)
-    if(nrow(eic)<2) next
-    if(max(eic[,"y"])<parDeco$minHeightMS1) next
-    re=.MGrefineROIs(eic,parDeco,drt=drt,minRTwin = minPIwindow,drt=drt)
-    if(is.null(re)) next
-    llre=c(llre,list(cbind(id=i,re)))
-  }
-  
-  if(nSlaves>1) stopCluster(clProc)
-  
-  ## combine results
-  ROImat3=do.call("rbind",llre[sapply(llre,length)>0])
-  colnames(ROImat3)=c("id","rtmin","rtmax","mz50","mz10","mz90","intensity","mzap","mzmin","mzmax")
-  l2k=which(ROImat3[,"intensity"]>=parDeco$minHeightMS1 & ROImat3[,"rtmin"]<=parDeco$rtlim[4] & ROImat3[,"rtmax"]>=parDeco$rtlim[1])
-  ROImat3=ROImat3[l2k,,drop=F]
-  ROImat3=ROImat3[order(ROImat3[,'mz50'],ROImat3[,"rtmin"]),,drop=F]
-  cat(" -- number of ROIs after refinement: ",nrow(ROImat3)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
-  
-  ### Associate MS/MS to ROI
+
+    ### Associate MS/MS to ROI
   llsplit=split(1:nrow(amzrt), ceiling(seq_along(1:nrow(amzrt))/200))
   Roi2sp=do.call("rbind",lapply(llsplit,function(x){
-    ddmz=outer(amzrt[x,"mz"],ROImat3[,"mzmin"],"-")>=(-parDeco$dmz/2) & outer(amzrt[x,"mz"],ROImat3[,"mzmax"],"-")<=parDeco$dmz/2
-    ddrt=outer(amzrt[x,"rt"],ROImat3[,"rtmin"],"-")>=0 & outer(amzrt[x,"rt"],ROImat3[,"rtmax"],"-")<=0
+    ddmz=outer(amzrt[x,"mz"],ROImat2[,"mzmin"],"-")>=(-parDeco$dmz/2) & outer(amzrt[x,"mz"],ROImat2[,"mzmax"],"-")<=parDeco$dmz/2
+    ddrt=outer(amzrt[x,"rt"],ROImat2[,"rtmin"],"-")>=0 & outer(amzrt[x,"rt"],ROImat2[,"rtmax"],"-")<=0
     re=which(ddrt & ddmz,arr=T)
     re[,1]=x[re[,1]]
     re}))
@@ -152,30 +284,35 @@ extractPI<-function(obj,
   Roi2sp=cbind(Roi2sp,rtms2=obj$MS2Infos[Roi2sp[,"i"],]$RT)
   lso=order(Roi2sp[,"i"],Roi2sp[,"col"],abs(Roi2sp[,"rt"]-Roi2sp[,"rtms2"]))
   Roi2sp=Roi2sp[lso,]
+  
   ## keep the maximum Pint around the original RT
   llsp=unlist(tapply(1:nrow(Roi2sp),Roi2sp[,"i"],function(x) tapply(x,Roi2sp[x,"col"],function(y) y[1:min(3,length(y))])),recursive = F)
   llsp=sapply(llsp,function(x) x[which.max(Roi2sp[x,"pint"])])
+  
   # llsp=unlist(tapply(1:nrow(Roi2sp),Roi2sp[,1],function(x) tapply(x,Roi2sp[x,6],function(y) y)),recursive = F)
   Roi2sp=Roi2sp[llsp,]
   Roi2sp=Roi2sp[Roi2sp[,"col"]%in%names(which(tapply(Roi2sp[,"pint"],Roi2sp[,"col"],max)>=parDeco$minPurity[2])),]
   lurois=sort(unique(Roi2sp[,"col"]))
   lnurois=1:length(lurois)
   Roi2sp[,"col"]=lnurois[match(Roi2sp[,"col"],lurois)]
-  ROImat4=ROImat3[lurois,-1]
-  rownames(ROImat4)=sprintf("R%.4f@%.1f-%.1f",ROImat4[,"mz50"],ROImat4[,"rtmin"],ROImat4[,"rtmax"])
+  ROImat3=data.frame(RoiId=NA,ROImat2[lurois,,drop=FALSE])
+  ROImat3$RoiId=rownames(ROImat3)=sprintf("R%.4f@%.1f-%.1f",ROImat3[,"mz"],ROImat3[,"rtmin"],ROImat3[,"rtmax"])
   
   SpId2ROI=data.frame(SpId=ms2inf$SpId[Roi2sp[,"i"]],
-                     ROI=rownames(ROImat4)[Roi2sp[,"col"]],
+                      RoiId=ROImat3$RoiId[Roi2sp[,"col"]],
                      PInt=round(Roi2sp[,"pint"],4),
                      yPrec=round(Roi2sp[,"y"],6),
                      mzPrec=round(Roi2sp[,"mz"],6),
                      rtPrec=round(Roi2sp[,"rt"],6))
 
-  cat(" --> Final number of ROIs: ",nrow(ROImat4)," assoc. to ",length(unique(SpId2ROI$SpId)),"/",nrow(ms2inf),
+  cat(" --> Final number of ROIs: ",nrow(ROImat3)," assoc. to ",length(unique(SpId2ROI$SpId)),"/",nrow(ms2inf),
       " MS/MS [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
 
-    
-  invisible(list(ROI=ROImat4,Sp2ROI=SpId2ROI))
+  obj$RoiInfos=ROImat3
+  obj$MS2toMS1=SpId2ROI
+  obj$parDeco=parDeco
+  class(obj) = unique(append(class(obj), "ddaSet"))
+  invisible(obj)
 }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
@@ -207,12 +344,12 @@ extractPI<-function(obj,
     mindmz=min(c(mean(rmz)*parDeco$ppm*10^-6,parDeco$dmz))/2
     
     re=.MGgetConsecutive(xeic,ncons=2,ppm=parDeco$ppm,dmz=parDeco$dmz,mindmz,minRTwin=minRTwin,minNoise=parDeco$minNoiseMS1,minHeight=0)
-      
+    
     if(is.null(re[[1]])) next
     l=which(re$st[,6]>=parDeco$minHeightMS1)
     if(length(l)==0) next
     winmat=rbind(winmat,.MGgetWindow(re$ll[l],xeic,ppm=parDeco$ppm,dmz=parDeco$dmz,minRTwin=minRTwin,maxRTwin=parDeco$drt/2,maxIter = 6))
-#    colnames(winmat)
+    colnames(winmat)=c( "rtmin","rtmax","mz50","mz10","mz90","intensity" ,"mzap","mzmin","mzmax" )
   }
   return(winmat)
 }
@@ -227,8 +364,9 @@ extractPI<-function(obj,
 #' @keywords internal
 #' 
 #' @export
-.MGgetConsecutive<-function(xeic,ncons=3,ppm=5,dmz=0.001,mindmz=dmz/2,minRTwin=0.01,minNoise=10000,minHeight=minNoise*2){
-  
+.MGgetConsecutive<-function(xeic,ncons=3,ppm=5,dmz=0.001,mindmz=dmz,minRTwin=0.01,minNoise=10000,minHeight=minNoise*2){
+#  re=.MGgetConsecutive(xeic,ncons=2,ppm=parDeco$ppm,dmz=parDeco$dmz,mindmz,minRTwin=minRTwin,minNoise=parDeco$minNoiseMS1,minHeight=0)
+# ncons=2;ppm=parDeco$ppm;dmz=parDeco$dmz;mindmz;minRTwin=minRTwin;minNoise=parDeco$minNoiseMS1;minHeight=0
   llx<-.MGinquickSplit(xeic,ncons = ncons,dppm = ppm,dmz=dmz,minNoise = minNoise)
   if(length(llx[[1]])==0) return(list(NULL,NULL))
   

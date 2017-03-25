@@ -64,7 +64,7 @@
   for (i in 1:length(tick.loc)) {
     tick.left[i] <- max(which(index.min[1:tick.loc[i]]))
     tick.right[i] <- min(which(index.min[tick.loc[i]:length(x)])) + 
-    tick.loc[i] - 1
+      tick.loc[i] - 1
   }
   if (tick.right[length(tick.loc)] == 1) 
     tick.right[length(tick.loc)] <- length(x)
@@ -101,10 +101,10 @@
   pks = data.frame(pk.loc = x[pks[,1]],
                    pk.left = x[pks[, 2]],
                    pk.right = x[pks[,3]],
-                   snr = y[pks[, 1]]/noise.local[pks[, 1]],
-                   intensity = y[pks[, 1]], 
-                   span = x[pks[, 3]] - x[pks[, 2]])
-  pks$cl = lcl
+                   pk.snr = y[pks[, 1]]/noise.local[pks[, 1]],
+                   pk.int = y[pks[, 1]], 
+                   pk.span = x[pks[, 3]] - x[pks[, 2]])
+  pks$pk.cl = lcl
   
   
   return(pks)
@@ -122,60 +122,68 @@
 #' @return a brand new eic
 #' @export
 .MGintegrateEIC<-function(xeic,drt,span=5,bw=drt*span*2,minNoise=10000,minHeight=NA){
-
-lnnas=which(!is.na(xeic[,"y"]) &  xeic[,"y"]>=minNoise)
-segpks=GRMeta:::.GRsplist(xeic[lnnas,"rt"],lnnas,d=span*drt/1.99,ismass = F) ## allows 2 missing scan if delta scan large due to a lot of 
-xrt=t(sapply(segpks,function(y) range(xeic[y,"rt"])))
-xrt[,1]=xrt[,1]-bw/2
-xrt[,2]=xrt[,2]+bw/2
-if(nrow(xrt)>1){
-  ll2merge=GRMeta:::.GRisover(xrt[,1],xrt[,2],T,bw-drt)
-  xrt=do.call("rbind",lapply(ll2merge,function(x) range(xrt[x,])))
-}
-xeic=cbind(xeic,"isin"=0)
-for(i in 1:nrow(xrt)) xeic[xeic[,"rt"]>=xrt[i,1] & xeic[,"rt"]<=xrt[i,2],"isin"]=1
-xeic=cbind(xeic,y2=xeic[,"y"])
-xeic[which(xeic[,"isin"]==0 | xeic[,"y"]<=minNoise),"y2"]=minNoise
-if(is.na(xeic[1,"y2"])) xeic[1,"y2"]=minNoise
-if(is.na(xeic[nrow(xeic),"y2"])) xeic[nrow(xeic),"y2"]=minNoise
-
-## Pseudo filling
-xeic=cbind(xeic,toimp=0)
-lnna=which(is.na(xeic[,"y2"]))
-if(length(lnna)){
-l2rep=GRMeta:::.GRsplist(lnna,lnna,d=1.1)
-for(y in l2rep){
-  df=data.frame(Y=log(xeic[range(y)+c(-1,1),"y2"]),RT=xeic[range(y)+c(-1,1),"rt"])
-  xeic[y,"y2"]=exp(predict(lm(Y~RT,df),newdata=data.frame(RT=xeic[y,"rt"])))
-  xeic[y,"toimp"]=1
-}
-}
-
-newx=.MGdoksmooth(x=xeic[,"rt"],y=xeic[,"y2"],missc = xeic[,"toimp"]==1,bw=bw,drt=drt)
-bsl=GRMeta:::.GRbslrf(newx$x,newx$y,NoXP = NULL)
-bsl$fit[bsl$fit<minNoise]=minNoise
-newx$bsl=bsl$fit
-# bsl$score <- (newx$y - bsl$fit)/max(bsl$sigma, 10^-3)
-# bsl$score[which(abs(bsl$score) > 10)] = sign(bsl$score[which(abs(bsl$score) > 10)]) * 10
-
-
-# x=newx$x;y=newx$y;noise.local =bsl$fit;snr.thresh = 2;span=11
-
-pks=simpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = 2,span=floor(span/2)*2+1,minNoise = minNoise*1.01)
-if(nrow(pks)==0) return(list(NULL,newx))
-## reduced pks
-lineic=data.frame(do.call("rbind",lapply(1:nrow(pks),function(y){
-  l=which(xeic[,"rt"]>=pks$pk.left[y] & xeic[,"rt"]<=pks$pk.right[y])
-  xeic[l[which.max(xeic[l,"y"])],c("mz","rt","y")]
-})))
-names(lineic)=c("mzap","rtap","intap")
-pks=cbind(pks,lineic)
-if(is.na(minHeight)) return(list(pks,newx))
-l2k=which(tapply(pks$intap,pks$cl,max)>=minHeight)
-pks=pks[pks$cl%in%l2k,,drop=F]
-if(nrow(pks)==0) return(list(NULL,newx))
-pks$cl=as.numeric(factor(pks$cl))
-return(list(pks,newx))
+  
+  # drt = parDeco$psdrt;span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1
+  
+  lnnas=which(!is.na(xeic[,"y"]) &  xeic[,"y"]>=minNoise)
+  segpks=GRMeta:::.GRsplist(xeic[lnnas,"rt"],lnnas,d=span*drt/1.99,ismass = F) ## allows 2 missing scan if delta scan large due to a lot of 
+  xrt=t(sapply(segpks,function(y) range(xeic[y,"rt"])))
+  xrt[,1]=xrt[,1]-bw/2
+  xrt[,2]=xrt[,2]+bw/2
+  if(nrow(xrt)>1){
+    ll2merge=GRMeta:::.GRisover(xrt[,1],xrt[,2],T,bw-drt)
+    xrt=do.call("rbind",lapply(ll2merge,function(x) range(xrt[x,])))
+  }
+  xeic=cbind(xeic,"isin"=0)
+  for(i in 1:nrow(xrt)) xeic[xeic[,"rt"]>=xrt[i,1] & xeic[,"rt"]<=xrt[i,2],"isin"]=1
+  xeic=cbind(xeic,y2=xeic[,"y"])
+  xeic[which(xeic[,"isin"]==0 | xeic[,"y"]<=minNoise),"y2"]=minNoise
+  if(is.na(xeic[1,"y2"])) xeic[1,"y2"]=minNoise
+  if(is.na(xeic[nrow(xeic),"y2"])) xeic[nrow(xeic),"y2"]=minNoise
+  
+  ## Pseudo filling
+  xeic=cbind(xeic,toimp=0)
+  lnna=which(is.na(xeic[,"y2"]))
+  if(length(lnna)){
+    l2rep=GRMeta:::.GRsplist(lnna,lnna,d=1.1)
+    for(y in l2rep){
+      df=data.frame(Y=log(xeic[range(y)+c(-1,1),"y2"]),RT=xeic[range(y)+c(-1,1),"rt"])
+      xeic[y,"y2"]=exp(predict(lm(Y~RT,df),newdata=data.frame(RT=xeic[y,"rt"])))
+      xeic[y,"toimp"]=1
+    }
+  }
+  
+  newx=.MGdoksmooth(x=xeic[,"rt"],y=xeic[,"y2"],missc = xeic[,"toimp"]==1,bw=bw,drt=drt)
+  bsl=GRMeta:::.GRbslrf(newx$x,newx$y,NoXP = NULL)
+  bsl$fit[bsl$fit<minNoise]=minNoise
+  newx$bsl=bsl$fit
+  bslscore <- (newx$y - newx$bsl)/max(bsl$sigma, 10^-3)
+  bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
+  newx$bslc=bslscore
+  
+  # x=newx$x;y=newx$y;noise.local =bsl$fit;snr.thresh = 2;span=11
+  
+  pks=.MGsimpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = 2,span=floor(span/2)*2+1,minNoise = minNoise*1.01)
+  if(nrow(pks)==0) return(list(NULL,newx))
+  ## reduced pks
+  lineic=data.frame(do.call("rbind",lapply(1:nrow(pks),function(y){
+    l=which(xeic[,"rt"]>=pks$pk.left[y] & xeic[,"rt"]<=pks$pk.right[y])
+    c(xeic[l[which.max(xeic[l,"y"])],c("mz","rt","y")],Area=unname(.GRgetArea(xeic[l,"rt"],xeic[l,"y2"]-10000)[1]))
+  })))
+  names(lineic)=c("ap.mz","ap.rt","ap.int","pk.area")
+  
+  lineic$pk.areasm=unname(sapply(1:nrow(pks),function(y){
+    l=which(newx$x>=pks$pk.left[y] & newx$x<=pks$pk.right[y])
+    .GRgetArea(newx$x[l],newx$y[l])[1]-.GRgetArea(newx$x[l],newx$bsl[l])[1]
+  }))
+  
+  pks=cbind(pks,lineic)
+  if(is.na(minHeight)) return(list(pks,newx))
+  l2k=which(tapply(pks$ap.int,pks$pk.cl,max)>=minHeight)
+  pks=pks[pks$pk.cl%in%l2k,,drop=F]
+  if(nrow(pks)==0) return(list(NULL,newx))
+  pks$pk.cl=as.numeric(factor(pks$pk.cl))
+  return(list(pks,newx))
 }
 
 

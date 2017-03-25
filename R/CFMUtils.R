@@ -83,7 +83,7 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
 #' @param root Root file
 #' @return List of list
 #' @export
-ManyCfm2Mgf<-function(mf2exp,what="Neg",fileout=NULL,root='/media/david/ef81e301-125c-45e8-8e74-9ed5bbd3fd3b/CFM'){
+ManyCfm2Mgf<-function(mf2exp,what="Neg",fileout=NULL,root){
   err=c()
   lfi=paste0(root,'/',what,'/',substr(mf2exp$Id,1,2),"/",gsub(";","_",mf2exp$Id),".log")
   
