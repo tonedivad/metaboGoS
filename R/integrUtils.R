@@ -119,9 +119,10 @@
 #' @param minRTwin baseline
 #' @param minNoise min noise for integrating
 #' @param minHeight min noise for integrating
+#' @param sbslr ratio sample to baseline
 #' @return a brand new eic
 #' @export
-.MGintegrateEIC<-function(xeic,drt,span=5,bw=drt*span*2,minNoise=10000,minHeight=NA){
+.MGintegrateEIC<-function(xeic,drt,span=5,bw=drt*span*2,minNoise=10000,minHeight=NA,sbslr=2){
   
   # drt = parDeco$psdrt;span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1
   
@@ -163,14 +164,15 @@
   
   # x=newx$x;y=newx$y;noise.local =bsl$fit;snr.thresh = 2;span=11
   
-  pks=.MGsimpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = 2,span=floor(span/2)*2+1,minNoise = minNoise*1.01)
+  pks=.MGsimpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = sbslr,span=floor(span/2)*2+1,minNoise = minNoise*1.01)
   if(nrow(pks)==0) return(list(NULL,newx))
   ## reduced pks
   lineic=data.frame(do.call("rbind",lapply(1:nrow(pks),function(y){
     l=which(xeic[,"rt"]>=pks$pk.left[y] & xeic[,"rt"]<=pks$pk.right[y])
-    c(xeic[l[which.max(xeic[l,"y"])],c("mz","rt","y")],Area=unname(.GRgetArea(xeic[l,"rt"],xeic[l,"y2"]-10000)[1]))
+    c(xeic[l[which.max(xeic[l,"y"])],c("mz","rt","y")],range(xeic[l,"mz"],na.rm=T),
+      Area=unname(.GRgetArea(xeic[l,"rt"],xeic[l,"y2"]-10000)[1]),scan=sum(!is.na(xeic[l,"mz"])))
   })))
-  names(lineic)=c("ap.mz","ap.rt","ap.int","pk.area")
+  names(lineic)=c("ap.mz","ap.rt","ap.int","pk.mzmin","pk.mzmax","pk.area","pk.nsc")
   
   lineic$pk.areasm=unname(sapply(1:nrow(pks),function(y){
     l=which(newx$x>=pks$pk.left[y] & newx$x<=pks$pk.right[y])

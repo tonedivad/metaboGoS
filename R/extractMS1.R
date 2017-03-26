@@ -48,7 +48,8 @@ refinePIRoi<-function(obj,
   ###################### Refine frames
   llre=list()
   ll=obj$RoiInfos$RoiId#[111:120]
-
+  lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+  
   if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
   if(nSlaves>1){
     clProc<-makeCluster(nSlaves)
@@ -70,9 +71,8 @@ refinePIRoi<-function(obj,
         re
     }
   ## Serial bit
-  lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
   if(nSlaves<=1) for(idx in ll){
-    if(idx %in% lperc) cat(which(ll==idx)," ")
+    if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])
     lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
     eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
@@ -90,22 +90,23 @@ refinePIRoi<-function(obj,
   ares$rtmin[ares$rtmin<parDeco$rtlim[1]]=parDeco$rtlim[1]
   ares$rtmax[ares$rtmax>parDeco$rtlim[4]]=parDeco$rtlim[4]
   ares$roi0=ares$roi
-  ares$roi=paste(ares$roi,ares$subroi,sep=";")
+  ares$RoiId=ares$newroi
   cat(" -- number of Peaks/ROIs after refinement: ",nrow(ares)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
   
-  lvar=c('roi',"rtmin","rtmax","rt","mz50","mz10","mz90", "mz","intensity" ,"mzmin","mzmax")
-  ROImat2=ares[tapply(1:nrow(ares),ares$roi,function(x) x[which.max(ares[x,"intensity"])]),lvar,drop=F]
+  lvar=c('RoiId',"rtmin","rtmax","rt","mz50","mz10","mz90", "mz","intensity" ,"mzmin","mzmax","coda")
+  ROImat2=ares[tapply(1:nrow(ares),ares$RoiId,function(x) x[which.max(ares[x,"intensity"])]),lvar,drop=F]
   l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & abs(ROImat2[,"rtmax"]-ROImat2[,"rtmin"])>=parDeco$minRTwin &
               ROImat2[,"rtmin"]<=parDeco$rtlim[4] & ROImat2[,"rtmax"]>=parDeco$rtlim[1])
   ROImat2=ROImat2[l2k,,drop=F]
   ROImat2=ROImat2[order(ROImat2[,'mz50'],ROImat2[,"rtmin"]),,drop=F]
-  ROImat2$RoiId=rownames(ROImat2)=sprintf("R%.4f@%.1f-%.1f",ROImat2[,"mz50"],ROImat2[,"rtmin"],ROImat2[,"rtmax"])
+  rownames(ROImat2)=ROImat2$RoiId #sprintf("R%.4f@%.1f-%.1f",ROImat2[,"mz50"],ROImat2[,"rtmin"],ROImat2[,"rtmax"])
+
   
   ## merge peaks
-  ares$RoiId=ROImat2$RoiId[match(ares$roi,ROImat2$roi)]
+#  ares$RoiId=ROImat2$RoiId[match(ares$roi,ROImat2$roi)]
   lvar=unique(c('RoiId',"pk.cl",names(ares)[c(grep("pk\\.",names(ares)),grep("ap\\.",names(ares)))]))
   PKmat=ares[,lvar]
-  PKmat=PKmat[order(PKmat[,'ap.mz'],PKmat[,"pk.loc"]),,drop=F]
+  PKmat=PKmat[order(round(PKmat[,'ap.mz']),PKmat[,'RoiId'],PKmat[,"pk.cl"]),,drop=F]
   newid=sprintf("%.4f@%.3f",PKmat$ap.mz,PKmat$pk.loc)
   ldups=names(which(table(newid)>1))
   for(i in ldups) newid[which(newid==i)]=sprintf("%.4f-%d@%.3f",PKmat$ap.mz[which(newid==i)],1:sum(newid==i),PKmat$pk.loc[which(newid==i)])
