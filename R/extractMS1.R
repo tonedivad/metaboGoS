@@ -72,7 +72,7 @@ refinePIRoi<-function(obj,
   ## Serial bit
   lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
   if(nSlaves<=1) for(idx in ll){
-    if(idx %in% lperc) cat(idx," ")
+    if(idx %in% lperc) cat(which(ll==idx)," ")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])
     lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
     eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
@@ -106,7 +106,11 @@ refinePIRoi<-function(obj,
   lvar=unique(c('RoiId',"pk.cl",names(ares)[c(grep("pk\\.",names(ares)),grep("ap\\.",names(ares)))]))
   PKmat=ares[,lvar]
   PKmat=PKmat[order(PKmat[,'ap.mz'],PKmat[,"pk.loc"]),,drop=F]
-  PKmat$PkId=rownames(PKmat)=sprintf("%.4f@%.3f",PKmat$ap.mz,PKmat$pk.loc)
+  newid=sprintf("%.4f@%.3f",PKmat$ap.mz,PKmat$pk.loc)
+  ldups=names(which(table(newid)>1))
+  for(i in ldups) newid[which(newid==i)]=sprintf("%.4f-%d@%.3f",PKmat$ap.mz[which(newid==i)],1:sum(newid==i),PKmat$pk.loc[which(newid==i)])
+  
+  PKmat$PkId=rownames(PKmat)=newid
  
   ###########################
   ### Associate MS/MS to ROI

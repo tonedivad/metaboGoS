@@ -53,7 +53,9 @@
     if(doPlot){
       newx=ire[[2]]
       
-      plot(xeic[,"rt"],xeic[,"y"],pch=16,main=paste(idx,iiroi,round(.GRcoda(newx$y),2)),xlab="Retention time",ylab="Height")
+      plot(xeic[,"rt"],xeic[,"y"],pch=16,main=paste(idx,iiroi,round(.GRcoda(newx$y),2)),xlab="Retention time",ylab="Height",
+           xlim=range(pretty(rtr)),ylim=range(c(0,xeic[,"y"],newx$y),na.rm=T),yaxt="n")
+      axis(2,las=2)
       lines(newx,col=2)
       lines(newx$x,newx$bsl,col=4)
       abline(h=parDeco$minHeightMS1)
