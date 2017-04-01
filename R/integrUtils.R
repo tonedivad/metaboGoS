@@ -48,7 +48,7 @@
 #' @param minNoise min noise for integrating
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01){
+.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01,v2alim=0.9){
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
   index.min = index$index.min
@@ -84,6 +84,26 @@
                tick.left = min(tick.left[ix]), tick.right = max(tick.right[ix])))
     c(tick.loc = tick.loc[ix], tick.left = tick.left[ix], tick.right = tick.right[ix])
   }))
+  
+  ### 
+  l2m=NULL
+  if(!is.na(v2alim)){
+  releft=y[pks[,2]]/y[pks[,1]]
+  reright=y[pks[,3]]/y[pks[,1]]
+  releft[1]=reright[length(reright)]=0
+  l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
+  if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
+  l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
+  if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
+  }
+  ##
+  if(!is.null(l2m)){
+  l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,]))
+  pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
+  pks=pks[-unlist(l2m),,drop=F]
+  pks=pks[order(pks[,1]),,drop=F]
+  }
+  
   
   ### comp cluster of peaks
   icl = 0
