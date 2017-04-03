@@ -1,15 +1,17 @@
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #' 
 #' Weighting around the precursor window -> to be improved with larger windo etc...
+#' TO DO: align properly the deconv/peak picking with the EIC integration!!!
 #' 
 #' @param eic vector of mz-mzPrec
+#' @param eicbl vector of mz-mzPrec for the blank samples
 #' @param parDeco weight
 #' @param idx weight
 #' @param doPlot weight
 #' @keywords internal
 #' 
 #' @export
-.MGrefFct0<-function(eic,parDeco,idx,doPlot=T){
+.MGrefFct0<-function(eic,eicbl=NULL,parDeco,idx,doPlot=T){
   
   reroi=.MGrefineROIs(eic[which(!is.na(eic[,"y"])),],parDeco,minRTwin = parDeco$minRTwin,drt=parDeco$psdrt)
   if(is.null(reroi)) return(NULL)
@@ -21,25 +23,50 @@
     iroi=reroi[iiroi,]
     mzr=range(iroi[c("mzmin","mzmax")])
     rtr0=rtr=range(iroi[c("rtmin","rtmax")])
-    rtr=rtr+c(-1,1)*parDeco$psdrt*(parDeco$span+1)  ## extra padding
+    rtr=rtr+c(-3,3)*parDeco$psdrt*(parDeco$span+1)  ## extra padding
     xeic=eic[which(eic[,"rt"]>=rtr[1] & eic[,"rt"]<=rtr[2]),]
     l2excl=which(xeic[,"mz"]<mzr[1] | xeic[,"mz"]>mzr[2])
     if(length(l2excl)) xeic[l2excl,c("mz","y")]=NA
     xeic=xeic[order(xeic[,"scan"],!is.na(xeic[,"mz"])),]
     xeic=xeic[which(!(duplicated(xeic[,"scan"]) & is.na(xeic[,"mz"]))),]
-    
+ 
+    ##### dual smooth/peak detec
     ire=.MGintegrateEIC(xeic,drt = parDeco$psdrt,span=parDeco$span,bw=parDeco$bw,minNoise=parDeco$minNoiseMS1,minHeight=parDeco$minHeightMS1,sbslr=2)
     if(is.null(ire[[1]])) next
     pks=ire[[1]]
     newx=ire[[2]]
+    
+    ##### check blank from and align to newx$x
+    newx$ybl=rep(parDeco$minNoiseMS1,length(newx$x))
+    if(!is.null(eicbl)){
+      tmpbl=eicbl
+      l2excl=which(tmpbl[,"mz"]<mzr[1] | tmpbl[,"mz"]>mzr[2])
+      if(length(l2excl)) tmpbl[l2excl,c("mz","y")]=NA
+      tmpbl=tmpbl[order(tmpbl[,"scan"],!is.na(tmpbl[,"mz"])),]
+      tmpbl=tmpbl[which(!(duplicated(tmpbl[,"scan"]) & is.na(tmpbl[,"mz"]))),]
+      tmpbl=tmpbl[tmpbl[,"blid"]%in%names(which(tapply(!is.na(tmpbl[,"y"]),tmpbl[,"blid"],sum)>10)),,drop=F]
+      if(nrow(tmpbl)>1){
+        tmpbl[which(is.na(tmpbl[,"y"]) | tmpbl[,"y"]<parDeco$minNoiseMS1),"y"]=parDeco$minNoiseMS1
+        tmpbl<-try(do.call("cbind",tapply(1:nrow(tmpbl),tmpbl[,"blid"],function(xbl){
+        ybl = .GRasysm(tmpbl[xbl,"y"], p = 0.5, lambda = 10^5)
+        ybl[ybl <= parDeco$minNoiseMS1 | is.na(ybl)] = parDeco$minNoiseMS1
+        ybl=approx(tmpbl[xbl,"rt"],ybl,newx$x,yleft = ybl[1],yright = rev(ybl)[1])$y})),TRUE)
+      if(!"try-error"%in%class(tmpbl)) newx$ybl=apply(tmpbl,1,min)
+      }
+    }
+    newx$filter=.GRfiltreScan((newx$y/newx$ybl)>2)
+    ire[[2]]$ybl=newx$ybl
+    
+    ## only keep peaks above blank
+    l2k=which(sapply(pks$pk.loc,function(i) any(newx$filter[which(abs(newx$x-i)<=(2*parDeco$psdrt))])))
+    pks=pks[l2k,,drop=F]
+    if(nrow(pks)==0) next
+    ##### reformat rois : groups of peaks separated by at leat 3*drt
     tmproi=rep(1,nrow(pks))
     if(nrow(pks)>1)
       for(i in 2:(nrow(pks))) tmproi[i]=tmproi[i-1]+ifelse((pks$pk.left[i]-pks$pk.right[i-1])>=3*parDeco$drt,1,0)
     
     llpks=tapply(1:nrow(pks),tmproi,function(x) pks[x,])
-    
-
-    ### reformat the ROI
     for(ipks in 1:length(llpks)){
       pks=llpks[[ipks]]
       rtr=rtr0
@@ -79,8 +106,9 @@
       abline(v=c(unique(pks$rtmax),unique(pks$rtmin)),col="grey",lwd=2)
       lines(newx,col=2)
       lines(newx$x,newx$bsl,col=4)
+      lines(newx$x,newx$ybl,col=3)
       abline(h=parDeco$minHeightMS1)
-      points(pks$pk.loc,pks$pk.int,pch=16,col=pks$pk.cl,cex=2)
+      points(pks$pk.loc,pks$pk.int,pch=8,col=pks$pk.cl,cex=2)
       abline(v=pks$pk.left+parDeco$psdrt/2,lty=3)
       abline(v=pks$pk.right-parDeco$psdrt/2,lty=4)
     }

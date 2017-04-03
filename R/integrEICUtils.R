@@ -22,8 +22,8 @@ for(isid in colnames(m)){
   bsl$fit[bsl$fit<minNoise]=minNoise
   bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
   bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-  bsllist$bsl[,isid]=bsl$fit[nspan*3+2+(1:nrow(m))]
-  bsllist$bslsc[,isid]=bslscore[nspan*3+2+(1:nrow(m))]
+  bsllist$bsl[,isid]=bsl$fit[nspan*5+1+(1:nrow(m))]
+  bsllist$bslsc[,isid]=bslscore[nspan*5+1+(1:nrow(m))]
 }
 
 # pks=.MGsimpleIntegr(lrt,y,noise.local =bsl$fit,snr.thresh = 2,span=floor(span/2)*2+1,minNoise = minNoise*1.01)

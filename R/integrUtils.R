@@ -46,6 +46,7 @@
 #' @param span bandwidth
 #' @param snr.thresh drt
 #' @param minNoise min noise for integrating
+#' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
 .MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01,v2alim=0.9){
@@ -175,12 +176,15 @@
   }
   
   newx=.MGdoksmooth(x=xeic[,"rt"],y=xeic[,"y2"],missc = xeic[,"toimp"]==1,bw=bw,drt=drt)
-  bsl=GRMeta:::.GRbslrf(newx$x,newx$y,NoXP = NULL)
+  y=newx$y
+  y=c(rep(y[1],31),y,rep(rev(y)[1],31))
+  
+  bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
   bsl$fit[bsl$fit<minNoise]=minNoise
-  newx$bsl=bsl$fit
-  bslscore <- (newx$y - newx$bsl)/max(bsl$sigma, 10^-3)
+  bslscore <- (y - newx$bsl)/max(bsl$sigma, 10^-3)
   bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-  newx$bslc=bslscore
+  newx$bslc=bslscore[(31+(1:length(newx$x)))]
+  newx$bsl=bsl$fit[(31+(1:length(newx$x)))]
   
   # x=newx$x;y=newx$y;noise.local =bsl$fit;snr.thresh = 2;span=11
   

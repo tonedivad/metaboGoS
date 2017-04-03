@@ -6,8 +6,8 @@
 
 Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors}
 \usage{
-refinePIRoi(obj, parDeco = list(span = 7, bw = 0.01, minNoiseMS1 = 10000),
-  refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE, nSlaves = 1)
+refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE,
+  blList = NULL, nSlaves = 1)
 }
 \arguments{
 \item{obj}{metaboGoS obj}
@@ -17,6 +17,8 @@ refinePIRoi(obj, parDeco = list(span = 7, bw = 0.01, minNoiseMS1 = 10000),
 \item{refFct}{refining function}
 
 \item{doPlot}{plotting at each step}
+
+\item{blList}{list of blank filles xcmsRaw object}
 
 \item{nSlaves}{number of slaves for parallel}
 }

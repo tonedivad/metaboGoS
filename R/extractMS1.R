@@ -9,13 +9,14 @@
 #' @param refFct refining function
 #' @param doPlot plotting at each step
 #' @param nSlaves number of slaves for parallel
+#' @param blList list of blank filles xcmsRaw object 
 #' @import foreach
 #' @import doParallel
 #' @return metaboGoS obj with RoiInfos / PeakInfos /params
 #' @export
 refinePIRoi<-function(obj,
-                       parDeco=list(span=7,bw=0.01,minNoiseMS1=10000),
-                       refFct=metaboGoS:::.MGrefFct0,doPlot=TRUE,
+                       parDeco, #=list(span=7,bw=0.01,minNoiseMS1=10000),
+                       refFct=metaboGoS:::.MGrefFct0,doPlot=TRUE,blList=NULL,
                        nSlaves=1){
   
   ## minPIwindow=0.05;PIweight=2;nSlaves=10
@@ -26,6 +27,13 @@ refinePIRoi<-function(obj,
   ########  ########  ########
   oparDeco=obj$parDeco
   if(!is.null(oparDeco))  for(i in names(oparDeco)[!names(oparDeco)%in%parDeco]) parDeco[[i]]=oparDeco[[i]]
+  
+  # blList=list()
+  # if(!is.null(blFiles)){
+  #   blFiles=blFiles[file.exists(blFiles)]
+  #   if(length(blFiles)>0)  for(i in 1:length(blFiles)) blList[[i]]=xcmsRaw(blFiles[i],includeMSn = FALSE)
+  # }
+  # 
   
   xr=xcmsRaw(obj$File$File,includeMSn = FALSE)
   #cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
@@ -47,38 +55,51 @@ refinePIRoi<-function(obj,
   
   ###################### Refine frames
   llre=list()
-  ll=obj$RoiInfos$RoiId#[111:120]
+  ll=ROImat$RoiId#[111:120]
   lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
   
   if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
   if(nSlaves>1){
     clProc<-makeCluster(nSlaves)
-    registerDoParallel(clProc)
+    doParallel::registerDoParallel(clProc)
     cat(" -- registering ",nSlaves," clusters\n",sep="")
   }
 
    ### Parallele bit
   if(nSlaves>1)
     #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
-      llre=foreach(idx = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
+      llre=foreach(idx = ll,.packages = c("metaboGoS"), .verbose =FALSE)  %dopar%{
         lmz=range(ROImat[idx,c("mzmin","mzmax")])
-        lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
-        eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
+        lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-3,3)*parDeco$psdrt*(parDeco$span+1) ## add 3*span to make use not in the downslope
+        eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =TRUE)
         if(sum(!is.na(eic[,"y"]))<2) return(list())
         if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) return(list())
-        re=refFct(eic,parDeco,idx,doPlot = FALSE)
+        if(length(blList)>0){
+          eicbl=do.call("rbind",lapply(1:length(blList),function(i){
+            i=cbind(GRMeta:::.GRrawMat(blList[[i]],mzrange = lmz, rtrange = lrt*60,padsc =TRUE),blid=i)
+            if(sum(!is.na(i[,"mz"]))<5) return(NULL)
+            i}))
+        } else eicbl=NULL
+        re=refFct(eic,eicbl,parDeco,idx,doPlot = FALSE)
         if(is.null(re)) return(list())
         re
     }
   ## Serial bit
-  if(nSlaves<=1) for(idx in ll){
+  if(nSlaves<=1) for(idx in ll[-(1:25)]){
+    print(idx)
     if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])
-    lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-1,1)*parDeco$psdrt*(parDeco$span+1)
+    lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-3,3)*parDeco$psdrt*(parDeco$span+1) ## add 3*span to make use not in the downslope
     eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
     if(sum(!is.na(eic[,"y"]))<2) next
     if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) next
-    re=refFct(eic,parDeco,idx,doPlot = doPlot)
+    if(length(blList)>0){
+      eicbl=do.call("rbind",lapply(1:length(blList),function(i){
+        i=cbind(GRMeta:::.GRrawMat(blList[[i]],mzrange = lmz, rtrange = lrt*60,padsc =T),blid=i)
+        if(sum(!is.na(i[,"mz"]))<5) return(NULL)
+        i}))
+    } else eicbl=NULL
+    re=refFct(eic,eicbl,parDeco,idx,doPlot = doPlot)
     if(is.null(re)) next
     llre=c(llre,list(re))
   }
@@ -86,9 +107,14 @@ refinePIRoi<-function(obj,
   if(nSlaves>1) stopCluster(clProc)
 
   ## combine results
-  ares=do.call("rbind",llre[sapply(llre,length)>0])
-  ares$rtmin[ares$rtmin<parDeco$rtlim[1]]=parDeco$rtlim[1]
-  ares$rtmax[ares$rtmax>parDeco$rtlim[4]]=parDeco$rtlim[4]
+  llre=llre[sapply(llre,length)>0]
+  if(length(llre)==0){
+    cat("Something went wrong no acceptable ROI were found!!!")
+    return(obj)
+  }
+  ares=do.call("rbind",llre)
+  ares$rtmin[ares$rtmin<min(parDeco$rtlim)]=min(parDeco$rtlim)
+  ares$rtmax[ares$rtmax>max(parDeco$rtlim)]=max(parDeco$rtlim)
   ares$roi0=ares$roi
   ares$RoiId=ares$newroi
   cat(" -- number of Peaks/ROIs after refinement: ",nrow(ares)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
@@ -96,7 +122,7 @@ refinePIRoi<-function(obj,
   lvar=c('RoiId',"rtmin","rtmax","rt","mz50","mz10","mz90", "mz","intensity" ,"mzmin","mzmax","coda")
   ROImat2=ares[tapply(1:nrow(ares),ares$RoiId,function(x) x[which.max(ares[x,"intensity"])]),lvar,drop=F]
   l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & abs(ROImat2[,"rtmax"]-ROImat2[,"rtmin"])>=parDeco$minRTwin &
-              ROImat2[,"rtmin"]<=parDeco$rtlim[4] & ROImat2[,"rtmax"]>=parDeco$rtlim[1])
+              ROImat2[,"rtmin"]<=max(parDeco$rtlim) & ROImat2[,"rtmax"]>=min(parDeco$rtlim))
   ROImat2=ROImat2[l2k,,drop=F]
   ROImat2=ROImat2[order(ROImat2[,'mz50'],ROImat2[,"rtmin"]),,drop=F]
   rownames(ROImat2)=ROImat2$RoiId #sprintf("R%.4f@%.1f-%.1f",ROImat2[,"mz50"],ROImat2[,"rtmin"],ROImat2[,"rtmax"])
