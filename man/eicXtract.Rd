@@ -6,11 +6,15 @@
 
 Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors}
 \usage{
-eicXtract(infile, eicmat, refFct = metaboGoS:::.MGfill, drt, nSlaves = 1,
-  save = FALSE, outfile = NULL, ...)
+eicXtract(infile, eicmat, addppm = NA, refFct = metaboGoS:::.MGfill, drt,
+  nSlaves = 1, save = FALSE, outfile = NULL, ...)
 }
 \arguments{
 \item{infile}{metaboGoS obj}
+
+\item{eicmat}{eicmat}
+
+\item{addppm}{add ppm}
 
 \item{refFct}{refining function}
 

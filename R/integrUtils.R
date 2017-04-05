@@ -132,7 +132,7 @@
 }
 #######  ########  ########  ########  ########  ########  ########  ########  ########  ########  ########  ######## 
 #'
-#' naive integration eic with fill-in missing scan/scna 
+#' naive integration eic with fill-in missing scan/scna -> first screening of PI must be rewordered to fit last integration step
 #'
 #' @param xeic EIC
 #' @param drt drt

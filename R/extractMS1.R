@@ -85,7 +85,7 @@ refinePIRoi<-function(obj,
         re
     }
   ## Serial bit
-  if(nSlaves<=1) for(idx in ll[-(1:25)]){
+  if(nSlaves<=1) for(idx in ll){
     print(idx)
     if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])

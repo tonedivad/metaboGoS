@@ -5,6 +5,8 @@
 #' Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors
 #'
 #' @param infile metaboGoS obj
+#' @param eicmat eicmat
+#' @param addppm add ppm 
 #' @param refFct refining function
 #' @param drt plotting at each step
 #' @param nSlaves number of slaves for parallel
@@ -14,11 +16,12 @@
 #' @import doParallel
 #' @return metaboGoS obj with RoiInfos / PeakInfos /params
 #' @export
-eicXtract<-function(infile,eicmat,refFct=metaboGoS:::.MGfill,drt,nSlaves=1,save=FALSE,outfile=NULL,...){
+eicXtract<-function(infile,eicmat,addppm=NA,refFct=metaboGoS:::.MGfill,drt,nSlaves=1,save=FALSE,outfile=NULL,...){
   
 print(infile)
 #drt=0.00446
 xr=xcmsRaw(infile)
+if(!is.na(addppm)) xr=.GRcorrRawPPM(xr,addppm)
 newrtx=(1:ceiling(max(xr@scantime/60/drt)))*drt
 sc2nrt=apply(abs(outer(newrtx,xr@scantime/60,"-")),2,which.min)
 sc2nrt=cbind(scan=1:length(xr@scantime),nscan=sc2nrt,nrt=round(newrtx[sc2nrt],5))
