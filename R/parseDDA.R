@@ -39,7 +39,7 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   if(sum(nchar(stype),na.rm=T)==0) stype="Unk"
   if(verbose) cat("Parsing the XML file '",cefi,"' for sample '",sid,"' of type '",stype,sep="")
   
-  File=data.frame(Sid=sid,File=normalizePath(cefi))
+  File=data.frame(Sid=sid,dirName=dirname(normalizePath(cefi)),fileName=basename(normalizePath(cefi)))
   if(!is.null(add2File)) for(i in names(add2File)[!names(add2File)%in%names(File)]) File[,i]=add2File[i]
   rownames(File)=File$Sid
   

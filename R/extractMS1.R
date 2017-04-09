@@ -8,8 +8,9 @@
 #' @param parDeco deconvolution parameter list
 #' @param refFct refining function
 #' @param doPlot plotting at each step
-#' @param nSlaves number of slaves for parallel
 #' @param blList list of blank filles xcmsRaw object 
+#' @param nSlaves number of slaves for parallel
+#' @param useMS1file use the MS1 scan in MS1file
 #' @import foreach
 #' @import doParallel
 #' @return metaboGoS obj with RoiInfos / PeakInfos /params
@@ -17,7 +18,7 @@
 refinePIRoi<-function(obj,
                        parDeco, #=list(span=7,bw=0.01,minNoiseMS1=10000),
                        refFct=metaboGoS:::.MGrefFct0,doPlot=TRUE,blList=NULL,
-                       nSlaves=1){
+                       nSlaves=1,useMS1file=TRUE){
   
   ## minPIwindow=0.05;PIweight=2;nSlaves=10
   if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
@@ -35,9 +36,10 @@ refinePIRoi<-function(obj,
   # }
   # 
   
-  xr=xcmsRaw(obj$File$File,includeMSn = FALSE)
-  #cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
+  cefi=normalizePath(paste0(obj$File$dirName,"/",ifelse(!is.null(obj$File$MS1file) & useMS1file,obj$File$MS1file,obj$File$fileName)))
+  xr=xcmsRaw(cefi,includeMSn = FALSE)
   sc2rt=round(xr@scantime/60,5)
+  cat("Refining/grouping potential PIs from '",unclass(xr@filepath),"'\n",sep="")
   
   psdrt=ifelse(is.null(parDeco$psdrt),NA,parDeco$psdrt)
   if(is.na(psdrt)) psdrt=parDeco$psdrt=quantile(sc2rt/60,.1)
@@ -203,6 +205,7 @@ refinePIRoi<-function(obj,
 #' @param parDeco deconvolution parameter list
 #' @param minPIwindow window size in min. around the spectra
 #' @param PIweight weighting
+#' @param useMS1file use the MS1 scan in MS1file
 ###' @param nSlaves number of slaves for parallel
 #' @import foreach
 #' @import doParallel
@@ -213,7 +216,7 @@ extractPIRoi<-function(obj,
                          ppm=5,dmz=0.001,psdrt=NA,
                          drt=1,rtlim=c(-Inf,-Inf,Inf,Inf),
                          minHeightMS1=100000,minZero=200),
-                    minPIwindow=NA,PIweight=2){
+                    minPIwindow=NA,PIweight=2,useMS1file=TRUE){
   
   ## minPIwindow=0.05;PIweight=2;nSlaves=10
   if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
@@ -221,7 +224,8 @@ extractPIRoi<-function(obj,
   strt=as.integer(as.POSIXct( Sys.time() ))
 
   ms2inf=obj$MS2Infos
-  xr=xcmsRaw(obj$File$File,includeMSn = FALSE)
+  cefi=normalizePath(paste0(obj$File$dirName,"/",ifelse(!is.null(obj$File$MS1file) & useMS1file,obj$File$MS1file,obj$File$fileName)))
+  xr=xcmsRaw(cefi,includeMSn = FALSE)
   cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
   
   sc2rt=round(xr@scantime/60,5)
@@ -244,20 +248,27 @@ extractPIRoi<-function(obj,
   if(length(lmiss)) stop('Missing parameters:',paste(lmiss,sep=" "))
 
   ### Get potential precursor within minRTwin of the spectra
-  amzrt=do.call("rbind",lapply(1:nrow(ms2inf),function(ipmz) {
-    scrange=range(which(abs(sc2rt-sc2rt[ms2inf[ipmz,"ScMS1"]])<=minRTwin))
-    re=GRMeta:::.GRrawMat(xr,scanrange=scrange,mzrange=ms2inf[ipmz,]$PrecMZ+c(-1,1)*(ms2inf[ipmz,]$WinSize+parDeco$dmz))
-    if(nrow(re)==0) return(NULL)# return(c(PInt=NA,MZ=NA,SBR=NA,CodaWide=NA))
-    we=.MGgetMZweight(re[,"mz"]-ms2inf[ipmz,]$PrecMZ,PIweight)
+  amzrt=list()
+  for(ipmz in 1:nrow(ms2inf)){
+    linrange=which(abs(sc2rt-ms2inf[ipmz,'RT'])<=minRTwin)
+    if(length(linrange)==0) next
+    scrange=range(linrange)
+    imz=ms2inf[ipmz,]$PrecMZ
+    mzrange=imz+c(-1,1)*(ms2inf[ipmz,]$WinSize+parDeco$dmz)
+    re=GRMeta:::.GRrawMat(xr,scanrange=scrange,mzrange=mzrange)
+    if(nrow(re)==0) next #return(NULL)# return(c(PInt=NA,MZ=NA,SBR=NA,CodaWide=NA))
+    we=.MGgetMZweight(re[,"mz"]-imz,PIweight)
     re[,"y"]=re[,"y"]*we
     pint=re[,"y"]/tapply(re[,"y"],re[,"scan"],sum)[as.character(re[,"scan"])]
-    if(max(pint)<parDeco$minPurity[1]) return(NULL)# return(c(PInt=NA,MZ=NA,SBR=NA,CodaWide=NA))
+    if(max(pint)<parDeco$minPurity[1]) next #return(NULL)# return(c(PInt=NA,MZ=NA,SBR=NA,CodaWide=NA))
     re=cbind(i=ipmz,pint=pint,re[,c("mz","rt","y"),drop=F])
-    re[pint>=parDeco$minPurity[1],,drop=F]}))
+    amzrt[[ipmz]]=re[pint>=parDeco$minPurity[1],,drop=F]
+  }
+  amzrt=do.call("rbind",amzrt)
   cat(" -- ",nrow(amzrt)," ions found: ",length(unique(amzrt[,1]))," spectra out of ",nrow(ms2inf),"\n Purity summary:\n",sep="")
   print(summary(amzrt[,2]))
   
-  
+  ### merge them
   llppm<-GRMeta:::.GRsplistMZ(amzrt[,"mz"],dppm = parDeco$ppm,dmz=parDeco$dmz,typ="min") ## min distance b/w dppm/dmz
   ROImat=do.call("rbind",lapply(llppm,function(x) c(median(amzrt[x,"mz"]),range(amzrt[x,"mz"]),round(range(amzrt[x,"rt"]),4))))
   colnames(ROImat)=c("mz","mzmin","mzmax","rtmin","rtmax")
@@ -282,7 +293,7 @@ extractPIRoi<-function(obj,
     }))
   })
   ROImat1=do.call("rbind",ROImat1)
-  colnames(ROImat1)=c(colnames(ROImat),"drt","intensity","aprt")
+  colnames(ROImat1)=c(colnames(ROImat),"drt","intensity","rt")
   
   l2k=which(ROImat1[,"intensity"]>=parDeco$minHeightMS1 & ROImat1[,"drt"]>=minRTwin & ROImat1[,"rtmin"]<=rtlim[4] & ROImat1[,"rtmax"] >= rtlim[1])
   ROImat1=ROImat1[l2k,]
@@ -294,7 +305,7 @@ extractPIRoi<-function(obj,
   ROImat2=do.call("rbind",lapply(llover,function(x){
     if(length(x)==0) return(ROImat1[x,,drop=F])
     c(mean(ROImat1[x,"mz"]),min(ROImat1[x,"mzmin"]),max(ROImat1[x,"mzmax"]),min(ROImat1[x,"rtmin"]),max(ROImat1[x,"rtmax"]),0,
-      max(ROImat1[x,"intensity"]),ROImat1[x[which.max(ROImat1[x,"intensity"])],"intensity"])
+      max(ROImat1[x,"intensity"]),ROImat1[x[which.max(ROImat1[x,"intensity"])],"rt"])
   }))
   colnames(ROImat2)=colnames(ROImat1)
   ROImat2[,"drt"]=ROImat2[,"rtmax"]-ROImat2[,"rtmin"]

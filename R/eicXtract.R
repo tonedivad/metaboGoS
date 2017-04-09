@@ -59,11 +59,13 @@ if(nSlaves>1){
 if(nSlaves<=1) for(iroi in ll){
   if(iroi%in%lperc) cat(iroi," ")
   i=which(eicmat$RoiId==iroi)
-xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = (range(eicmat[i,c("rtmin","rtmax")])+c(-2,2)*drt)*60,padsc = T) # extrat pad for the newscan
+  rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-3,3)*drt)
+xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc = T) # extrat pad for the newscan
 if(all(is.na(xeic[,"y"]))) next
 xeic=cbind(xeic,sc2nrt[xeic[,"scan"],2:3])
 #if(any(table(xeic[,"scan"])>1)) print(c(sum(table(xeic[,"scan"])>1),i))
 df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...)))
+#df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,span=7)))
 allxeic[[iroi]]=df
 }
 

@@ -7,7 +7,7 @@
 Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors}
 \usage{
 refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE,
-  blList = NULL, nSlaves = 1)
+  blList = NULL, nSlaves = 1, useMS1file = TRUE)
 }
 \arguments{
 \item{obj}{metaboGoS obj}
@@ -21,6 +21,8 @@ refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE,
 \item{blList}{list of blank filles xcmsRaw object}
 
 \item{nSlaves}{number of slaves for parallel}
+
+\item{useMS1file}{use the MS1 scan in MS1file}
 }
 \value{
 metaboGoS obj with RoiInfos / PeakInfos /params

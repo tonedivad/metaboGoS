@@ -8,7 +8,8 @@ Fast association of spectra to ROIs from potential precursors}
 \usage{
 extractPIRoi(obj, parDeco = list(minPurity = c(0.2, 0.4), ppm = 5, dmz =
   0.001, psdrt = NA, drt = 1, rtlim = c(-Inf, -Inf, Inf, Inf), minHeightMS1 =
-  1e+05, minZero = 200), minPIwindow = NA, PIweight = 2)
+  1e+05, minZero = 200), minPIwindow = NA, PIweight = 2,
+  useMS1file = TRUE)
 }
 \arguments{
 \item{obj}{metaboGoS obj}
@@ -18,6 +19,8 @@ extractPIRoi(obj, parDeco = list(minPurity = c(0.2, 0.4), ppm = 5, dmz =
 \item{minPIwindow}{window size in min. around the spectra}
 
 \item{PIweight}{weighting}
+
+\item{useMS1file}{use the MS1 scan in MS1file}
 
 \item{nSlaves}{number of slaves for parallel}
 }
