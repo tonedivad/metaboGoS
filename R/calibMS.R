@@ -10,10 +10,11 @@
 #' @param minpts Minimum of points
 #' @param bkpoint breakpoint mass to calculate robust regression
 #' @param calInt calibration interval to compute 
+#' @param doPlot should plot
 #' @import DoseFinding
 #' @return xcms
 #' @export
-calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calInt),calInt=c(80,350)){
+calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calInt),calInt=c(80,400),doPlot=T){
   
   # dppm=20;bw=2.5;minpts=11;bkpoint=200;calInt=c(80,350)
   cat("Opening ",filein,"\n")
@@ -45,13 +46,20 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
   matdf$out=(1:nrow(matdf)%in%tapply(1:nrow(matdf),matdf$cal,function(x){
     minres=min(abs(matdf$res[x]))
     x[abs(matdf$res[x])<(2*minres)]}))
-  plot(matdf$calmz,matdf$dppm,col=matdf$out+1)
-  
+
   ###  gam  
   mod=DoseFinding:::fitMod(calmz,dppm,matdf[matdf$out,],model="sigEmax",bnds = rbind(calInt,range(matdf$dppm[matdf$out])*1.2))
   #mod=DoseFinding:::fitMod(calmz2,dppm,matdf[matdf$out,],model="emax")
   
-  
+  if(doPlot){
+    xl=pretty(range(c(matdf$calmz,calInt)))
+    pred=predict(mod,predType = "full-model",newdata = data.frame(calmz=min(xl):max(xl)))
+    yl=pretty(range(c(matdf$dppm,0,pred),na.rm=T))
+    plot(matdf$calmz,matdf$dppm,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="delta ppm")
+    abline(h=-1:1,lty=c(2,1,2))
+    axis(2,at=yl,las=2,pos=min(xl));axis(1,at=xl,pos=min(yl))
+    lines(min(xl):max(xl),pred)
+  }
   
   # mod=scam(dppm~s(calmz,bs="mpi",m=2),family=gaussian(link="identity"),data=matdf[matdf$out,],not.exp=FALSE)
   # modd=scam(dppm~s(calmz,bs="mpd",m=2),family=gaussian(link="identity"),data=matdf[matdf$out,],not.exp=FALSE)
@@ -86,8 +94,9 @@ setMethod(".MGcorrRawPPM","xcmsRaw",
             #  xRaw2=xRaw
             scsten=cbind(object@scanindex+1,c(object@scanindex[-1],length(object@env$intensity)))
             rownames(scsten)=1:length(object@scanindex)
-            lmz=floor(object@mzrange[1]):ceiling(object@mzrange[2])
-            
+            lmz=c(floor(object@mzrange[1]-.5),ceiling(object@mzrange[2]+.5)+1)
+            if(lmz[1]>1) lmz[1]=lmz[1]-1
+            lmz=lmz[1]:lmz[2]
             ### Fix add ppm
             if(length(addppm)==1) addppm=rep(round(addppm,3),length(lmz)) else   addppm=round(approx(as.numeric(names(addppm)),addppm,lmz,yleft = addppm[1],yright = rev(addppm)[1])$y,3)
             

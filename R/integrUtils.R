@@ -49,7 +49,7 @@
 #' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01,v2alim=0.9){
+.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
   index.min = index$index.min
@@ -146,7 +146,7 @@
 .MGintegrateEIC<-function(xeic,drt,span=5,bw=drt*span*2,minNoise=10000,minHeight=NA,sbslr=2){
   
   # drt = parDeco$psdrt;span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1
-  
+  nspan=floor(span/2)*2+1
   lnnas=which(!is.na(xeic[,"y"]) &  xeic[,"y"]>=minNoise)
   segpks=GRMeta:::.GRsplist(xeic[lnnas,"rt"],lnnas,d=span*drt/1.99,ismass = F) ## allows 2 missing scan if delta scan large due to a lot of 
   xrt=t(sapply(segpks,function(y) range(xeic[y,"rt"])))
@@ -177,18 +177,18 @@
   
   newx=.MGdoksmooth(x=xeic[,"rt"],y=xeic[,"y2"],missc = xeic[,"toimp"]==1,bw=bw,drt=drt)
   y=newx$y
-  y=c(rep(y[1],31),y,rep(rev(y)[1],31))
+  y=c(rep(y[1],5*nspan+1),y,rep(rev(y)[1],5*nspan+1))
   
   bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
   bsl$fit[bsl$fit<minNoise]=minNoise
-  bslscore <- (y - newx$bsl)/max(bsl$sigma, 10^-3)
+  bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
   bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-  newx$bslc=bslscore[(31+(1:length(newx$x)))]
-  newx$bsl=bsl$fit[(31+(1:length(newx$x)))]
+  newx$bslc=bslscore[nspan*5+1+(1:length(newx$y))]
+  newx$bsl=bsl$fit[nspan*5+1+(1:length(newx$y))]
   
   # x=newx$x;y=newx$y;noise.local =bsl$fit;snr.thresh = 2;span=11
   
-  pks=.MGsimpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = sbslr,span=floor(span/2)*2+1,minNoise = minNoise*1.01)
+  pks=.MGsimpleIntegr(newx$x,newx$y,noise.local =newx$bsl,snr.thresh = sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
   if(nrow(pks)==0) return(list(NULL,newx))
   ## reduced pks
   lineic=data.frame(do.call("rbind",lapply(1:nrow(pks),function(y){

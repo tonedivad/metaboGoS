@@ -19,6 +19,7 @@
 # idx=ll[[1]]
 llre=list()
 ll=names(alleicmat)#[111:120]
+ll=ll[which(sapply(alleicmat,function(x) max(x$y,na.rm=T))>=parDeco$minHeightMS1)]
 lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
 
 if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
@@ -75,6 +76,8 @@ return(ares)
   m0=t(eic$y)#/1000000
   mmz=t(eic$mz)#/1000000
   if(all(colnames(m)%in%l2excl)) return(NULL) ## if all to be excluded then stop
+  maxm0=max(m0[,!colnames(m0)%in%l2excl],na.rm=T)
+  if(maxm0<parDeco$minHeightMS1) return(NULL)
   span=parDeco$span
   minNoise=parDeco$minNoiseMS1
   
@@ -117,6 +120,7 @@ for(i in 1:length(llpk)) apks$PkCl[llpk[[i]]]=i
 l2k=as.numeric(names(which(tapply(apks$tick.int*2,apks$Pk,max)>parDeco$minHeightMS1 & tapply(apks$tick.snr,apks$Pk,max)>2)))
 l2k=l2k[l2k%in%unique(apks$PkCl[!apks$Sid%in%l2excl])]
 apks=apks[apks$Pk%in%l2k,]
+if(nrow(apks)==0) return(NULL)
 apks$PkCl=as.numeric(factor(apks$PkCl,names(sort(tapply(apks$tick.loc,apks$PkCl,mean)))))
 apks=apks[order(apks$Sid,apks$PkCl),]
 apks$PkCl2=1
@@ -263,7 +267,7 @@ invisible(matpks)
   
   #par(mfrow=c(2,1),mar=c(5,4,1,.1))
   par(mfrow=c(2,1),mar=c(5,4,1,.1))
-  matplot(lrt,m,typ="l",ylim=range(ylim),main=iroi,xlim=range(xl),
+  matplot(lrt,m,typ="l",ylim=range(ylim),xlim=range(xl),#main=iroi,
           col=cols,axes=F,xlab="rt",ylab="Int")
   # matplot(lrt,m0,typ="p",ylim=ylim,col=metaData[sids,]$Cols,pch=16,add=T)
   axis(2,las=2,pos=xl[1]);axis(1,at=xl,pos=0)
@@ -276,7 +280,7 @@ invisible(matpks)
   abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
   
   ylim=pretty(rmz)
-  plot(matpks$rt,matpks$mz,ylim=range(ylim),main=iroi,xlim=range(xl),axes=F,xlab="rt",ylab="",col=cols[matpks$Pk],pch=16)
+  plot(matpks$rt,matpks$mz,ylim=range(ylim),xlim=range(xl),axes=F,xlab="rt",ylab="",col=cols[matpks$Pk],pch=16) #,main=iroi
   abline(v=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=2,lwd=2)
   abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
   abline(h=ylim,lty=2,col="grey")

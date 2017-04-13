@@ -17,10 +17,11 @@
 #' @export
 refinePIRoi<-function(obj,
                        parDeco, #=list(span=7,bw=0.01,minNoiseMS1=10000),
-                       refFct=metaboGoS:::.MGrefFct0,doPlot=TRUE,blList=NULL,
-                       nSlaves=1,useMS1file=TRUE){
+                       refFct=metaboGoS:::.MGrefFct0,
+                      doPlot=TRUE,blList=NULL, nSlaves=1,useMS1file=TRUE){
   
-  ## minPIwindow=0.05;PIweight=2;nSlaves=10
+  ## doPlot=TRUE;blList=NULL;nSlaves=1;useMS1file=TRUE
+  
   if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
   
   strt=as.integer(as.POSIXct( Sys.time() ))
@@ -39,10 +40,23 @@ refinePIRoi<-function(obj,
   cefi=normalizePath(paste0(obj$File$dirName,"/",ifelse(!is.null(obj$File$MS1file) & useMS1file,obj$File$MS1file,obj$File$fileName)))
   xr=xcmsRaw(cefi,includeMSn = FALSE)
   sc2rt=round(xr@scantime/60,5)
+  
+  
   cat("Refining/grouping potential PIs from '",unclass(xr@filepath),"'\n",sep="")
   
   psdrt=ifelse(is.null(parDeco$psdrt),NA,parDeco$psdrt)
   if(is.na(psdrt)) psdrt=parDeco$psdrt=quantile(sc2rt/60,.1)
+
+  ### set new pseudo Scan 
+  newrtx=(1:ceiling(max(xr@scantime/60/psdrt)))*psdrt
+  sc2nrt=apply(abs(outer(newrtx,xr@scantime/60,"-")),2,which.min)
+  sc2nrt=cbind(scan=1:length(xr@scantime),nscan=sc2nrt,nrt=round(newrtx[sc2nrt],5))
+  ###
+  # if(!is.null(blList)) blList=lapply(blList,function(xrb){
+  # sc2nrt2=apply(abs(outer(newrtx,xrb@scantime/60,"-")),2,which.min)
+  # sc2nrt2=cbind(scan=1:length(xrb@scantime),nscan=sc2nrt2,nrt=round(newrtx[sc2nrt2],5))
+  # list(xrb,sc2nrt2)
+  # })
   
   minRTwin=ifelse(is.null(parDeco$minRTwin),NA,parDeco$minRTwin)
   if(is.na(minRTwin)) parDeco$minRTwin=minRTwin=quantile(diff(xr@scantime/60),.9)+2.1*psdrt ## set it to near largest delta rt + 2*psdrt
@@ -82,26 +96,29 @@ refinePIRoi<-function(obj,
             if(sum(!is.na(i[,"mz"]))<5) return(NULL)
             i}))
         } else eicbl=NULL
-        re=refFct(eic,eicbl,parDeco,idx,doPlot = FALSE)
+        eic=cbind(eic,sc2nrt[eic[,"scan"],2:3])
+        re=may(eic,eicbl,parDeco,idx,doPlot = FALSE)
         if(is.null(re)) return(list())
         re
     }
   ## Serial bit
-  if(nSlaves<=1) for(idx in ll){
-    print(idx)
+  if(nSlaves<=1) for(idx in  ll[grep("175",ll)]){
     if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])
     lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-3,3)*parDeco$psdrt*(parDeco$span+1) ## add 3*span to make use not in the downslope
     eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =T)
     if(sum(!is.na(eic[,"y"]))<2) next
     if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) next
+    eicbl=NULL
     if(length(blList)>0){
-      eicbl=do.call("rbind",lapply(1:length(blList),function(i){
-        i=cbind(GRMeta:::.GRrawMat(blList[[i]],mzrange = lmz, rtrange = lrt*60,padsc =T),blid=i)
+      eicbl=do.call("rbind",lapply(1:length(blList),function(ibl){
+        i=cbind(GRMeta:::.GRrawMat(blList[[ibl]],mzrange = lmz, rtrange = lrt*60+c(-10,10),padsc =T),blid=ibl)
         if(sum(!is.na(i[,"mz"]))<5) return(NULL)
-        i}))
-    } else eicbl=NULL
-    re=refFct(eic,eicbl,parDeco,idx,doPlot = doPlot)
+        i
+        }))
+    }
+    eic=cbind(eic,sc2nrt[eic[,"scan"],2:3])
+    re=.MGrefFct0(eic,eicbl,parDeco,idx,doPlot = doPlot) ## change here + update the 
     if(is.null(re)) next
     llre=c(llre,list(re))
   }
@@ -115,6 +132,9 @@ refinePIRoi<-function(obj,
     return(obj)
   }
   ares=do.call("rbind",llre)
+  
+  ## split in pk & roi + add selection on coda
+  
   ares$rtmin[ares$rtmin<min(parDeco$rtlim)]=min(parDeco$rtlim)
   ares$rtmax[ares$rtmax>max(parDeco$rtlim)]=max(parDeco$rtlim)
   ares$roi0=ares$roi
@@ -143,7 +163,7 @@ refinePIRoi<-function(obj,
  
   ###########################
   ### Associate MS/MS to ROI
-  ## !! recompute the exact values of the precursors
+  ## !! recompute the exact values of the precursors??
   oMS2ROI=obj$MS2toMS1
   oMS2ROI$OldRoiId=oMS2ROI$RoiId
   llsplit=split(1:nrow(oMS2ROI), ceiling(seq_along(1:nrow(oMS2ROI))/200))

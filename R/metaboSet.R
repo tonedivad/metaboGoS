@@ -46,7 +46,7 @@ makeMetaboSet<-function(matpks,metainfos){
   if("int.ap"%in%names(alldata) & !"Height"%in%names(alldata)) names(alldata)[names(alldata)=="int.ap"]="Height"
   if("area"%in%names(alldata) & !"Area"%in%names(alldata)) names(alldata)[names(alldata)=="area"]="Area"
   ### Make Annot
-  annot=data.frame(Analyte=newpkids$metnam,MetName=NA,LevelAnnot=4,Method=imeth,IsSTD=FALSE,IsISO=FALSE,RT=newpkids$rt,MZ=newpkids$mz)
+  annot=data.frame(Analyte=newpkids$metnam,MetName=NA,LevelAnnot=4,Method=imeth,IsSTD=FALSE,IsISO=FALSE,RT=newpkids$rt,MZ=newpkids$mz,PkId=newpkids$PkId)
   rownames(annot)=annot$Analyte
   ### Make meta
   metadf=metainfos[,!names(metainfos)%in%c(  "dirName","fileName","completionTime" ,"Method")]

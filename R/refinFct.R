@@ -6,20 +6,27 @@
 #' @param eic vector of mz-mzPrec
 #' @param eicbl vector of mz-mzPrec for the blank samples
 #' @param parDeco weight
-#' @param idx weight
+#' @param imain for the plot tile
 #' @param doPlot weight
 #' @keywords internal
 #' 
 #' @export
-.MGrefFct0<-function(eic,eicbl=NULL,parDeco,idx,doPlot=T){
+.MGrefFct0<-function(eic,eicbl=NULL,parDeco,imain=NULL,doPlot=T){
   
   reroi=.MGrefineROIs(eic[which(!is.na(eic[,"y"])),],parDeco,minRTwin = parDeco$minRTwin,drt=parDeco$psdrt)
   if(is.null(reroi)) return(NULL)
   l2k=which(reroi[,"intensity"]>=parDeco$minHeightMS1 & (reroi[,"rtmax"]-reroi[,"rtmin"])>parDeco$minRTwin)
   if(length(l2k)==0) return(NULL)
+  
+  
+  nspan=floor(parDeco$span/2)*2+1
+  
+  
   reroi=reroi[l2k,,drop=F]
-  reroi2=list()
+  llmatpks=list()
   for(iiroi in 1:nrow(reroi)){
+    
+    #########
     iroi=reroi[iiroi,]
     mzr=range(iroi[c("mzmin","mzmax")])
     rtr0=rtr=range(iroi[c("rtmin","rtmax")])
@@ -29,15 +36,25 @@
     if(length(l2excl)) xeic[l2excl,c("mz","y")]=NA
     xeic=xeic[order(xeic[,"scan"],!is.na(xeic[,"mz"])),]
     xeic=xeic[which(!(duplicated(xeic[,"scan"]) & is.na(xeic[,"mz"]))),]
- 
+    
     ##### dual smooth/peak detec
-    ire=.MGintegrateEIC(xeic,drt = parDeco$psdrt,span=parDeco$span,bw=parDeco$bw,minNoise=parDeco$minNoiseMS1,minHeight=parDeco$minHeightMS1,sbslr=2)
-    if(is.null(ire[[1]])) next
-    pks=ire[[1]]
-    newx=ire[[2]]
+    # drt = parDeco$psdrt ; span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1;sbslr=2
+    newx=.MGfill(xeic,drt,nspan,bw,minNoise)
+    y=newx[,"y2"]
+    y=c(rep(y[1],nspan*5+1),y,rep(rev(y)[1],nspan*5+1))
+    bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
+    bsl$fit[bsl$fit<minNoise]=minNoise
+    bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
+    bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
+    #newx$bslc=bslscore[nspan*5+1+(1:length(newx$y))]
+    newx=data.frame(cbind(newx,bsl=bsl$fit[nspan*5+1+(1:nrow(newx))]))
+    
+    #### quick integration
+    pks=.MGsimpleIntegr(x=newx[,"rt"],y=newx[,"y2"],noise.local =newx[,"bsl"],snr.thresh = 2,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+    if(nrow(pks)==0) next
     
     ##### check blank from and align to newx$x
-    newx$ybl=rep(parDeco$minNoiseMS1,length(newx$x))
+    newx$ybl=rep(parDeco$minNoiseMS1,nrow(newx))
     if(!is.null(eicbl)){
       tmpbl=eicbl
       l2excl=which(tmpbl[,"mz"]<mzr[1] | tmpbl[,"mz"]>mzr[2])
@@ -46,75 +63,106 @@
       tmpbl=tmpbl[which(!(duplicated(tmpbl[,"scan"]) & is.na(tmpbl[,"mz"]))),]
       tmpbl=tmpbl[tmpbl[,"blid"]%in%names(which(tapply(!is.na(tmpbl[,"y"]),tmpbl[,"blid"],sum)>10)),,drop=F]
       if(nrow(tmpbl)>1){
-        tmpbl[which(is.na(tmpbl[,"y"]) | tmpbl[,"y"]<parDeco$minNoiseMS1),"y"]=parDeco$minNoiseMS1
+        tmpbl[which(is.na(tmpbl[,"y"]) | tmpbl[,"y"]<minNoise),"y"]=minNoise
         tmpbl<-try(do.call("cbind",tapply(1:nrow(tmpbl),tmpbl[,"blid"],function(xbl){
-        ybl = .GRasysm(tmpbl[xbl,"y"], p = 0.5, lambda = 10^5)
-        ybl[ybl <= parDeco$minNoiseMS1 | is.na(ybl)] = parDeco$minNoiseMS1
-        ybl=approx(tmpbl[xbl,"rt"],ybl,newx$x,yleft = ybl[1],yright = rev(ybl)[1])$y})),TRUE)
-      if(!"try-error"%in%class(tmpbl)) newx$ybl=apply(tmpbl,1,min)
+          ybl = .GRasysm(tmpbl[xbl,"y"], p = 0.5, lambda = 10^5)
+          ybl[ybl <= minNoise | is.na(ybl)] = minNoise
+          ybl=approx(tmpbl[xbl,"rt"],ybl,newx$rt,yleft = ybl[1],yright = rev(ybl)[1])$y})),TRUE)
+        if(!"try-error"%in%class(tmpbl)) newx$ybl=apply(tmpbl,1,median)
       }
     }
-    newx$filter=.GRfiltreScan((newx$y/newx$ybl)>2)
-    ire[[2]]$ybl=newx$ybl
     
-    ## only keep peaks above blank
-    l2k=which(sapply(pks$pk.loc,function(i) any(newx$filter[which(abs(newx$x-i)<=(2*parDeco$psdrt))])))
-    pks=pks[l2k,,drop=F]
+    ## compute the SBR around the apex
+    pks$pk.sbr=round(sapply(pks$pk.loc,function(i) max((newx$y2/newx$ybl)[which(abs(newx$rt-i)<=(2*parDeco$psdrt))])),3)
+    l2k=as.numeric(names(which(tapply(pks$pk.sbr,pks$pk.cl,max)>2 & tapply(pks$pk.snr,pks$pk.cl,max)>2 & tapply(pks$pk.int*2,pks$pk.cl,max)>minHeight)))
+    pks=pks[pks$pk.cl%in%l2k,,drop=F]
     if(nrow(pks)==0) next
-    ##### reformat rois : groups of peaks separated by at leat 3*drt
-    tmproi=rep(1,nrow(pks))
-    if(nrow(pks)>1)
-      for(i in 2:(nrow(pks))) tmproi[i]=tmproi[i-1]+ifelse((pks$pk.left[i]-pks$pk.right[i-1])>=3*parDeco$drt,1,0)
-    
-    llpks=tapply(1:nrow(pks),tmproi,function(x) pks[x,])
-    for(ipks in 1:length(llpks)){
-      pks=llpks[[ipks]]
-      rtr=rtr0
-    nrtr=range(c(pks$pk.left,pks$pk.right))+c(-1.49,1.49)*parDeco$drt#+c(-1,1)*parDeco$psdrt*parDeco$span
-    rtr[1]=max(rtr[1],nrtr[1])
-    rtr[2]=min(rtr[2],nrtr[2])
-    pks$rtmin=rtr[1]
-    pks$rtmax=rtr[2]
-    
-    l=which(newx$x>=rtr[1] & newx$x<=rtr[2])
-    icoda=.GRcoda(newx$y)
-    l=which(xeic[,"rt"]>=rtr[1] & xeic[,"rt"]<=rtr[2] & !is.na(xeic[,"mz"]))
-    ieic=xeic[l,]
-    pks$mzmin=min(ieic[,"mz"]);pks$mzmax=max(ieic[,"mz"])
-    pks$mz50=median(ieic[,"mz"]);pks$mz10=quantile(ieic[,"mz"],.1);pks$mz90=quantile(ieic[,"mz"],.9)
-    roiap=which.max(ieic[,"y"])
-    pks$intensity=ieic[roiap,"y"]
-    pks$rt=ieic[roiap,"rt"]
-    pks$mz=ieic[roiap,"mz"]
-    pks$coda=icoda
-    pks$roi=idx
-    pks$subroi=iiroi
     pks$pk.cl=as.numeric(factor(pks$pk.cl))
-    pks$newroi=sprintf("R%.4f@%.2f-%.2f",pks$mz50,pks$rtmin,pks$rtmax)
-    llpks[[ipks]]=pks
+    
+    ## compute coda/roi stats
+    pks$pk.roi=rep(1,nrow(pks))
+    if(nrow(pks)>1)
+      for(i in 2:(nrow(pks))) pks$pk.roi[i]=pks$pk.roi[i-1]+ifelse((pks$pk.left[i]-pks$pk.right[i-1])>=parDeco$drt,1,0)
+    
+    pks=cbind(pks,do.call("rbind",tapply(1:nrow(pks),pks$pk.roi,function(x){
+      nrtr0=range(c(pks$pk.left[x],pks$pk.right[x]))+c(-.49,.49)*parDeco$drt
+      nrtr0[1]=max(nrtr0[1],min(rtr0))
+      nrtr0[2]=min(nrtr0[2],max(rtr0))
+      l1=which(newx$rt>=nrtr0[1] & newx$rt<=nrtr0[2])
+      nrtr=range(c(pks$pk.left[x],pks$pk.right[x]))
+      l2=which(newx$rt>=nrtr[1] & newx$rt<=nrtr[2])
+      data.frame(roi.id=sprintf("R%.4f@%.2f-%.2f",median(newx[l2,"mz"],na.rm=T),min(newx[l2,"rt"],na.rm=T),max(newx[l2,"rt"],na.rm=T)),
+                 roi.coda=.GRcoda(newx$y2[l1]),roi.mz50=unname(median(newx[l2,"mz"],na.rm=T)),
+                 roi.mz10=unname(quantile(newx[l2,"mz"],.1,na.rm=T)),roi.mz90=unname(quantile(newx[l2,"mz"],.9,na.rm=T)))
+    }))[as.character(pks$pk.roi),,drop=FALSE])
+    
+    ## integrate peaks
+    newx$y2v=newx$y2-newx$bsl
+    newx$y2v[newx$y2v<0]=0
+    
+    idx=1
+    matpks=list()
+    for(idx in 1:nrow(pks)){
+      tmp=newx[which(newx$rt>=pks$pk.left[idx] & newx$rt<=pks$pk.right[idx]),]
+      
+      lnna=which(!is.na(tmp$y))
+      lnna=lnna[order(abs(lnna-which.max(tmp$y2)),-tmp$y[lnna])]
+      if(length(lnna)>nspan) lnna=lnna[1:nspan] 
+      iap=lnna[which.max(tmp$y[lnna])]
+      
+      matpks[[idx]]=data.frame(id=idx,
+                               pk.id=sprintf("P%.5f@%.3f",tmp$mz[iap],tmp$rt[iap]),
+                               pk.rtmin=min(tmp$rt),
+                               pk.rtmax=max(tmp$rt),
+                               pk.rt=tmp$rt[which.max(tmp$y2)],
+                               pk.rtap=tmp$rt[iap],
+                               pk.int.ap=tmp$y[iap],
+                               pk.int.apsm=max(tmp$y2),
+                               pk.intmin=tmp$y2[1],
+                               pk.bslmin=tmp$bsl[1],
+                               pk.intmax=rev(tmp$y2)[1],
+                               pk.bslmax=rev(tmp$bsl)[1],
+                               pk.npts=sum(!is.na(tmp$y)),
+                               pk.mz=round(tmp$mz[iap],6),
+                               pk.mzmin=round(min(tmp$mz[iap],na.rm = T),6),
+                               pk.mzmax=round(max(tmp$mz[iap],na.rm = T),6),
+                               pk.mzmed=suppressWarnings(round(matrixStats:::weightedMedian(tmp$mz,tmp$y,na.rm=T),6)),
+                               pk.area.sm=round(unname(.GRgetArea(tmp$rt,tmp$y2)[1]),3),
+                               pk.area=round(.GRgetArea(tmp$rt[!is.na(tmp$y)],tmp$y[!is.na(tmp$y)])[1],3))
     }
-    pks=do.call("rbind",llpks)
+    matpks=do.call("rbind",matpks)
+    
+    matpks=cbind(matpks,pks[matpks$id,c("pk.sbr","pk.snr")],pks[matpks$id,grep("^roi.",names(pks))])
+    matpks$id=paste0("R",pks$pk.roi,"C",pks$pk.cl)[matpks$id]
+    matpks$cl.id=tapply(1:nrow(matpks),matpks$id,function(x) sprintf("C%.5f@%.3f",median(matpks$pk.mz[x]),median(matpks$pk.rtap[x])))[matpks$id]
+    
+    
+    # 
+    # 
+    # 
+    # pks$newroi=sprintf("R%.4f@%.2f-%.2f",pks$mz50,pks$rtmin,pks$rtmax)
+    llmatpks[[ipks]]=matpks
     ###
     
     if(doPlot){
-    #  pks=ire[[1]]
-      newx=ire[[2]]
+      #  pks=ire[[1]]
+      # newx=ire[[2]]
       
-      plot(xeic[,"rt"],xeic[,"y"],pch=16,main=paste(idx,iiroi,round(.GRcoda(newx$y),2)),xlab="Retention time",ylab="Height",
+      plot(xeic[,"rt"],xeic[,"y"],pch=16,main=paste(imain,iiroi,round(.GRcoda(newx$y2),2)),xlab="Retention time",ylab="Height",
            xlim=range(pretty(rtr0)),ylim=range(c(0,xeic[,"y"],newx$y),na.rm=T),yaxt="n")
       axis(2,las=2)
-      abline(v=c(unique(pks$rtmax),unique(pks$rtmin)),col="grey",lwd=2)
-      lines(newx,col=2)
-      lines(newx$x,newx$bsl,col=4)
-      lines(newx$x,newx$ybl,col=3)
+      abline(v=c(unique(matpks$pk.rtmax),unique(matpks$pk.rtmin)),col="grey",lwd=2)
+      lines(newx$rt,newx$y2,col=2)
+      lines(newx$rt,newx$bsl,col=4,lwd=2,lty=4)
+      lines(newx$rt,newx$ybl,col=3,lwd=2,lty=2)
       abline(h=parDeco$minHeightMS1)
-      points(pks$pk.loc,pks$pk.int,pch=8,col=pks$pk.cl,cex=2)
-      abline(v=pks$pk.left+parDeco$psdrt/2,lty=3)
-      abline(v=pks$pk.right-parDeco$psdrt/2,lty=4)
+      points(matpks$pk.rtap,matpks$pk.int.ap,pch=8,col=factor(matpks$cl.id),cex=2)
+      abline(v=matpks$pk.left+parDeco$psdrt/2,lty=3)
+      abline(v=matpks$pk.right-parDeco$psdrt/2,lty=4)
     }
     
-    reroi2=c(reroi2,list(pks))
+    #   reroi2=c(reroi2,list(pks))
   }
-  reroi2=do.call("rbind",reroi2)
-  return(reroi2)
+  allmatpks=do.call("rbind",llmatpks)
+  return(allmatpks)
 }
