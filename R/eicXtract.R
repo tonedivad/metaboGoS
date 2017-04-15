@@ -128,12 +128,16 @@ invisible(allxeic)
   newx=data.frame(xeic[match(lsc,xeic[,"nscan"]),c("scan","mz","y","id")],nscan=lsc,rt=lsc*drt,y2=approx(newx$x,newx$y,lsc*drt)$y)
   newx=newx[!is.na(newx$y2),]
   
-  bsl = GRMeta:::.GRbslrf(newx$rt, newx$y2, NoXP = NULL)
-  bsl$fit[bsl$fit < minNoise] = minNoise
-  newx$bsl = bsl$fit
-  bslscore <- (newx$y2 - newx$bsl)/max(bsl$sigma, 10^-3)
+  y=newx$y2
+  n2pad=131
+  y=c(rep(y[1],n2pad),y,rep(rev(y)[1],n2pad))
+  bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
+  bsl$fit[bsl$fit<minNoise]=minNoise
+  bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
   bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-  newx$bslc = bslscore
+
+  newx$bsl = bsl$fit[n2pad+(1:length(newx$y2))]
+  newx$bslc = bslscore[n2pad+(1:length(newx$y2))]
   newx
 }
 

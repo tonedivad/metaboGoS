@@ -17,12 +17,10 @@
   if(is.null(reroi)) return(NULL)
   l2k=which(reroi[,"intensity"]>=parDeco$minHeightMS1 & (reroi[,"rtmax"]-reroi[,"rtmin"])>parDeco$minRTwin)
   if(length(l2k)==0) return(NULL)
-  
+  reroi=reroi[l2k,,drop=F]
   
   nspan=floor(parDeco$span/2)*2+1
-  
-  
-  reroi=reroi[l2k,,drop=F]
+  minNoise=parDeco$minNoiseMS1
   llmatpks=list()
   for(iiroi in 1:nrow(reroi)){
     
@@ -39,18 +37,23 @@
     
     ##### dual smooth/peak detec
     # drt = parDeco$psdrt ; span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1;sbslr=2
-    newx=.MGfill(xeic,drt,nspan,bw,minNoise)
-    y=newx[,"y2"]
-    y=c(rep(y[1],nspan*5+1),y,rep(rev(y)[1],nspan*5+1))
-    bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
-    bsl$fit[bsl$fit<minNoise]=minNoise
-    bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
-    bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-    #newx$bslc=bslscore[nspan*5+1+(1:length(newx$y))]
-    newx=data.frame(cbind(newx,bsl=bsl$fit[nspan*5+1+(1:nrow(newx))]))
+    newx=.MGfill(xeic,parDeco$psdrt,nspan,parDeco$bw,minNoise)
+    # y=newx[,"y2"]
+    # n2pad=floor(parDeco$drt/parDeco$psdrt/2)
+    # y=c(rep(y[1],n2pad),y,rep(rev(y)[1],n2pad))
+    # bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
+    # bsl$fit[bsl$fit<minNoise]=minNoise
+    # bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
+    # bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
+    # #newx$bslc=bslscore[nspan*5+1+(1:length(newx$y))]
+    # newx=data.frame(cbind(newx,bsl=bsl$fit[n2pad+(1:nrow(newx))],bslc=bslscore[n2pad+(1:nrow(newx))]))
+    # noise.local=(newx$y2/newx$bsl >=2 & newx$bslc>=1)*1;noise.local[newx$bslc< -1]=-1
+    # 
+    # bsl=newx$bsl;bslscore=newx$bslc;x=newx[,"rt"];y=newx[,"y2"];span=nspan;minNoise = minNoise*1.01;v2alim = 0.8
     
     #### quick integration
-    pks=.MGsimpleIntegr(x=newx[,"rt"],y=newx[,"y2"],noise.local =newx[,"bsl"],snr.thresh = 2,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+    pks=.MGsimpleIntegr2(x=newx[,"rt"],y=newx[,"y2"],bsl = newx$bsl,bslscore = newx$bslc,snr.thresh = parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+ #  pks=.MGsimpleIntegr(x=newx[,"rt"],y=newx[,"y2"],noise.local =newx$bslc,snr.thresh = 1,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
     if(nrow(pks)==0) next
     
     ##### check blank from and align to newx$x
@@ -74,7 +77,11 @@
     
     ## compute the SBR around the apex
     pks$pk.sbr=round(sapply(pks$pk.loc,function(i) max((newx$y2/newx$ybl)[which(abs(newx$rt-i)<=(2*parDeco$psdrt))])),3)
-    l2k=as.numeric(names(which(tapply(pks$pk.sbr,pks$pk.cl,max)>2 & tapply(pks$pk.snr,pks$pk.cl,max)>2 & tapply(pks$pk.int*2,pks$pk.cl,max)>minHeight)))
+    pks$pk.snr=round(sapply(pks$pk.loc,function(i) max((newx$y2/newx$bsl)[which.min(abs(newx$rt-i))])),3)
+    
+    l2k=as.numeric(names(which(tapply(pks$pk.sbr,pks$pk.cl,max)>=parDeco$sbr &
+                                 tapply(pks$pk.snr,pks$pk.cl,max)>=parDeco$sbslr &
+                                 tapply(pks$pk.int*2,pks$pk.cl,max)>parDeco$minHeightMS1)))
     pks=pks[pks$pk.cl%in%l2k,,drop=F]
     if(nrow(pks)==0) next
     pks$pk.cl=as.numeric(factor(pks$pk.cl))
@@ -106,6 +113,7 @@
       tmp=newx[which(newx$rt>=pks$pk.left[idx] & newx$rt<=pks$pk.right[idx]),]
       
       lnna=which(!is.na(tmp$y))
+      if(length(lnna)==0) next
       lnna=lnna[order(abs(lnna-which.max(tmp$y2)),-tmp$y[lnna])]
       if(length(lnna)>nspan) lnna=lnna[1:nspan] 
       iap=lnna[which.max(tmp$y[lnna])]
@@ -128,20 +136,16 @@
                                pk.mzmax=round(max(tmp$mz[iap],na.rm = T),6),
                                pk.mzmed=suppressWarnings(round(matrixStats:::weightedMedian(tmp$mz,tmp$y,na.rm=T),6)),
                                pk.area.sm=round(unname(.GRgetArea(tmp$rt,tmp$y2)[1]),3),
-                               pk.area=round(.GRgetArea(tmp$rt[!is.na(tmp$y)],tmp$y[!is.na(tmp$y)])[1],3))
+                               pk.area=round(.GRgetArea(tmp$rt[!is.na(tmp$y)],tmp$y[!is.na(tmp$y)])[1],3),
+                               pk.snr=tmp$y[iap]/tmp$bsl[iap])
     }
+    if(length(matpks)==0) next
     matpks=do.call("rbind",matpks)
     
-    matpks=cbind(matpks,pks[matpks$id,c("pk.sbr","pk.snr")],pks[matpks$id,grep("^roi.",names(pks))])
+    matpks=cbind(matpks,pk.sbr=pks[matpks$id,c("pk.sbr")],pks[matpks$id,grep("^roi.",names(pks))])
     matpks$id=paste0("R",pks$pk.roi,"C",pks$pk.cl)[matpks$id]
     matpks$cl.id=tapply(1:nrow(matpks),matpks$id,function(x) sprintf("C%.5f@%.3f",median(matpks$pk.mz[x]),median(matpks$pk.rtap[x])))[matpks$id]
-    
-    
-    # 
-    # 
-    # 
-    # pks$newroi=sprintf("R%.4f@%.2f-%.2f",pks$mz50,pks$rtmin,pks$rtmax)
-    llmatpks[[ipks]]=matpks
+    llmatpks[[iiroi]]=matpks
     ###
     
     if(doPlot){
@@ -157,8 +161,8 @@
       lines(newx$rt,newx$ybl,col=3,lwd=2,lty=2)
       abline(h=parDeco$minHeightMS1)
       points(matpks$pk.rtap,matpks$pk.int.ap,pch=8,col=factor(matpks$cl.id),cex=2)
-      abline(v=matpks$pk.left+parDeco$psdrt/2,lty=3)
-      abline(v=matpks$pk.right-parDeco$psdrt/2,lty=4)
+      abline(v=matpks$pk.min+parDeco$psdrt/2,lty=3)
+      abline(v=matpks$pk.max-parDeco$psdrt/2,lty=4)
     }
     
     #   reroi2=c(reroi2,list(pks))

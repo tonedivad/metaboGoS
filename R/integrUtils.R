@@ -42,22 +42,20 @@
 #'
 #' @param x retention time
 #' @param y intensity
-#' @param noise.local baseline
+#' @param noise.local y/baseline
 #' @param span bandwidth
 #' @param snr.thresh drt
 #' @param minNoise min noise for integrating
 #' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh = 2,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
+.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh=NA,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
   index.min = index$index.min
   index.max = index$index.max
   imax <- which(index.max)
-  snr = y[imax]/noise.local[imax]
-  good.snr <- (snr >= snr.thresh)
-  snr <- snr[good.snr]
+  if(!is.na(snr.thresh)) good.snr = (noise.local[imax])>=snr.thresh else good.snr = (noise.local[imax])
   tick.loc <- imax[good.snr]
   if ((npeak = length(tick.loc)) == 0) 
     return(data.frame())
@@ -89,20 +87,20 @@
   ### 
   l2m=NULL
   if(!is.na(v2alim)){
-  releft=y[pks[,2]]/y[pks[,1]]
-  reright=y[pks[,3]]/y[pks[,1]]
-  releft[1]=reright[length(reright)]=0
-  l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
-  if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
-  l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
-  if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
+    releft=y[pks[,2]]/y[pks[,1]]
+    reright=y[pks[,3]]/y[pks[,1]]
+    releft[1]=reright[length(reright)]=0
+    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
+    if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
+    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
+    if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
   }
   ##
   if(!is.null(l2m)){
-  l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,]))
-  pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
-  pks=pks[-unlist(l2m),,drop=F]
-  pks=pks[order(pks[,1]),,drop=F]
+    l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,]))
+    pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
+    pks=pks[-unlist(l2m),,drop=F]
+    pks=pks[order(pks[,1]),,drop=F]
   }
   
   
@@ -122,7 +120,7 @@
   pks = data.frame(pk.loc = x[pks[,1]],
                    pk.left = x[pks[, 2]],
                    pk.right = x[pks[,3]],
-                   pk.snr = y[pks[, 1]]/noise.local[pks[, 1]],
+                   pk.snr = noise.local[pks[, 1]],
                    pk.int = y[pks[, 1]], 
                    pk.span = x[pks[, 3]] - x[pks[, 2]])
   pks$pk.cl = lcl
@@ -130,6 +128,190 @@
   
   return(pks)
 }
+
+######  ########  ########  ########  ########  ########  ########  ########  ########  ########  ########  ######## 
+#'
+#' rewritting of ksmooth to fill-in missing scan/uneually spaced rt
+#'
+#' @param x retention time
+#' @param y intensity
+#' @param noise.local +1/0/-1
+#' @param span bandwidth
+#' @param snr.thresh drt
+#' @param minNoise min noise for integrating
+#' @param v2alim merge close apices if valley to apex less than 0.9
+#' @return a brand new eic
+#' @export
+.MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
+  index <- GRMeta:::.GRmsExtrema(y, span = span)
+  nvar <- length(x)
+  index.min = index$index.min
+  index.max = index$index.max
+  imax <- which(index.max)
+  tick.loc <-imax[((y/bsl)>=snr.thresh & bslscore>1)[imax]]
+  tick.loc2 <-imax[(bslscore[imax]>1)]
+  tick.loc2=tick.loc2[!tick.loc2%in%tick.loc]
+  if ((npeak = length(tick.loc)) == 0) 
+    return(data.frame())
+  
+  ### remove valleys to close to each other
+  ival<- which(index.min)
+  l2merge=lapply(2:length(ival),function(i){
+  #  if(!any(index.min[tick.loc[i-1]:tick.loc[i]])) return(c(tick.loc[i-1],tick.loc[i]))
+    if(max(y[c(ival[i],ival[i-1])]/max(y[ival[i]:ival[i-1]]))>=v2alim & (ival[i]-ival[i-1])<span+3) return(c(ival[i-1],ival[i]))
+    c()})
+  l2merge=l2merge[sapply(l2merge,length)>1]
+  if(length(l2merge)>0){
+    l2merge=.GRmergellx(l2merge)
+    for(i in l2merge) index.min[i[-which.min(bslscore[i])]]=FALSE
+  }
+  
+  
+  
+  
+  ### check if tick.lock have index.min
+  if(length(tick.loc)>1){
+    l2merge=lapply(2:length(tick.loc),function(i){
+      if(!any(index.min[tick.loc[i-1]:tick.loc[i]])) return(c(tick.loc[i-1],tick.loc[i]))
+      if(max(min(y[tick.loc[i]:tick.loc[i-1]])/y[c(tick.loc[i],tick.loc[i-1])])>=v2alim & (tick.loc[i]-tick.loc[i-1])<2*span) return(c(tick.loc[i-1],tick.loc[i]))
+      c()})
+    l2merge=l2merge[sapply(l2merge,length)>1]
+    if(length(l2merge)>0){
+      l2merge=.GRmergellx(l2merge)
+      for(i in l2merge){
+        tick.loc=tick.loc[!tick.loc%in%i[-which.max(y[i])]]
+        index.min[min(i):max(i)]=FALSE
+      }
+    }
+  }
+  
+  # 
+  # lmins=unique(c(1,which(index.min & bslscore< -1),length(y)))
+  # lmins=lapply(2:length(lmins),function(i) lmins[i-1]:lmins[i])
+  # lmins=lmins[sapply(lmins,function(i) any(i%in%tick.loc))]
+  # 
+  # 
+  tick.left <- tick.right <- rep(NA, length(tick.loc))
+  ## check left side
+  for (i in 1:length(tick.loc)) {
+    llv=rev(which(index.min[1:tick.loc[i]]))
+    if(i>1) llv=llv[llv>max(tick.loc[1:(i-1)])]
+    if(length(llv)==1){tick.left[i]=llv;next}
+    if(any(bslscore[llv]< -1)) llv=llv[1:which(bslscore[llv]< -1)[1]] ## pick the closest well below bsl
+    if(length(llv)==1){tick.left[i]=llv;next}
+    
+    while(any(abs(diff(llv))<(1.5*span+1))) llv=llv[-which.min(abs(diff(llv)))]
+    if(length(llv)==1){tick.left[i]=llv;next}
+    # while(any(abs(diff(llv))>(3*span+1))) llv=llv[-(which.max(abs(diff(llv)))+1)]
+    # if(length(llv)==1){tick.left[i]=llv;next}
+    while(any(diff(y[llv])>0))  llv=llv[1:which(diff(y[llv])>0)[1]]
+    if(length(llv)==1){tick.left[i]=llv;next}
+    
+    if(any(bslscore[llv]< 0)) llv=llv[1:which(bslscore[llv]< 0)[1]] 
+    if(length(llv)==1){tick.left[i]=llv;next}
+    if(any(bslscore[llv]< 1)) llv=llv[1:which(bslscore[llv]< 1)[1]] ## pick the closest well below bsl
+    tick.left[i]=llv[which.min(bslscore[llv])]
+    
+  }
+  
+  ## check right side
+  for (i in 1:length(tick.loc)) {
+    llv=which(index.min[tick.loc[i]:length(x)])+ tick.loc[i] - 1
+    if(i<length(tick.loc)) llv=llv[llv<min(tick.loc[(i+1):length(tick.loc)])]
+    if(length(llv)==1){tick.right[i]=llv;next}
+    if(any(bslscore[llv]< -1)) llv=llv[1:which(bslscore[llv]< -1)[1]] ## pick the closest well below bsl
+    if(length(llv)==1){tick.right[i]=llv;next}
+    while(any(diff(llv)<(1.5*span+1))) llv=llv[-which.min(diff(llv))]
+    if(length(llv)==1){tick.right[i]=llv;next}
+    # while(any(diff(llv)>(3*span+1))) llv=llv[-(which.max(diff(llv))+1)]
+    # if(length(llv)==1){tick.right[i]=llv;next} 
+    while(any(diff(y[llv])>0))  llv=llv[1:which(diff(y[llv])>0)[1]] ## valley must go down
+    if(length(llv)==1){tick.right[i]=llv;next}
+    if(any(bslscore[llv]< 0)) llv=llv[1:which(bslscore[llv]< 0)[1]]
+    if(length(llv)==1){tick.right[i]=llv;next}
+    if(any(bslscore[llv]< 1)) llv=llv[1:which(bslscore[llv]< 1)[1]]
+    if(length(llv)==1){tick.right[i]=llv;next}
+    tick.right[i]=llv[which.min(bslscore[llv])]
+    
+  }
+  
+  # 
+  #   llright=
+  #   if(i<length(tick.loc)) llright=llright[llright<min(tick.loc[-(1:i)])]
+  #    ## pick the closest well below bsl
+  #   # tick.left[i] <- max()
+  #   # tick.right[i] <- min() 
+  # }
+  # 
+  ## fix left and right
+  if (tick.right[length(tick.loc)] == 1) 
+    tick.right[length(tick.loc)] <- length(x)
+  # if (tick.rightn[length(tick.loc)] == 1) 
+  #   tick.rightn[length(tick.loc)] <- length(x)
+  if (tick.left[1] == 1) 
+    tick.left[1] <- which.min(y[1:tick.loc[1]] != minNoise)
+  # if (tick.leftn[1] == 1) 
+  #   tick.leftn[1] <- which.min(y[1:tick.loc[1]] != minNoise)
+  
+  for (ix in 1:length(tick.loc)) {
+    l = tick.left[ix]:tick.right[ix]
+    tick.left[ix] = max(tick.left[ix], min(l[which(y[l] >minNoise)]) - 1)
+    tick.right[ix] = min(tick.right[ix], max(l[which(y[l] >minNoise)]) + 1)
+  }
+  lpks = lapply(unique(tick.left), function(x) which(tick.left == x))
+  
+  pks = do.call("rbind", lapply(lpks, function(ix) {
+    if (length(ix) > 1) 
+      return(c(tick.loc = tick.loc[ix[which.max(y[tick.loc[ix]])]], 
+               tick.left = min(tick.left[ix]), tick.right = max(tick.right[ix])))
+    c(tick.loc = tick.loc[ix], tick.left = tick.left[ix], tick.right = tick.right[ix])
+  }))
+  
+  ### 
+  l2m=NULL
+  if(!is.na(v2alim)){
+    releft=y[pks[,2]]/y[pks[,1]]
+    reright=y[pks[,3]]/y[pks[,1]]
+    releft[1]=reright[length(reright)]=0
+    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
+    if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
+    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
+    if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
+  }
+  ##
+  if(!is.null(l2m)){
+    l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,]))
+    pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
+    pks=pks[-unlist(l2m),,drop=F]
+    pks=pks[order(pks[,1]),,drop=F]
+  }
+  
+  
+  ### comp cluster of peaks
+  icl = 0
+  lcl = l = c()
+  for (ix in 1:nrow(pks)) {
+    if (any((pks[ix, 3]:pks[ix, 2]) %in% l)) {
+      l = c(l, pks[ix, 3]:pks[ix, 2])
+    }
+    else {
+      l = pks[ix, 3]:pks[ix, 2]
+      icl = icl + 1
+    }
+    lcl = c(lcl, icl)
+  }
+  pks = data.frame(pk.loc = x[pks[,1]],
+                   pk.left = x[pks[, 2]],
+                   pk.right = x[pks[,3]],
+                   pk.snr = (y/bsl)[pks[, 1]],
+                   pk.int = y[pks[, 1]], 
+                   pk.span = x[pks[, 3]] - x[pks[, 2]])
+  pks$pk.cl = lcl
+  
+  
+  return(pks)
+}
+
 #######  ########  ########  ########  ########  ########  ########  ########  ########  ########  ########  ######## 
 #'
 #' naive integration eic with fill-in missing scan/scna -> first screening of PI must be rewordered to fit last integration step

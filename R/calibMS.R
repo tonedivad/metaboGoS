@@ -11,10 +11,10 @@
 #' @param bkpoint breakpoint mass to calculate robust regression
 #' @param calInt calibration interval to compute 
 #' @param doPlot should plot
-#' @import DoseFinding
+#' @import segmented
 #' @return xcms
 #' @export
-calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calInt),calInt=c(80,400),doPlot=T){
+calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T){
   
   # dppm=20;bw=2.5;minpts=11;bkpoint=200;calInt=c(80,350)
   cat("Opening ",filein,"\n")
@@ -37,7 +37,7 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
   matdf=matdf[matdf$n>=minpts,]
   matdf=matdf[order(matdf$calmz,matdf$mz),]
   
-  ### remove duplicated based on robust regression before/after break point
+  ### estimate outliers around breakpoint
   matdf$res=0
   l1=which(matdf$calmz<=bkpoint)
   matdf$res[l1]=resid(MASS:::rlm(dppm~calmz,matdf[l1,]))
@@ -47,30 +47,86 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
     minres=min(abs(matdf$res[x]))
     x[abs(matdf$res[x])<(2*minres)]}))
 
-  ###  gam  
-  mod=DoseFinding:::fitMod(calmz,dppm,matdf[matdf$out,],model="sigEmax",bnds = rbind(calInt,range(matdf$dppm[matdf$out])*1.2))
-  #mod=DoseFinding:::fitMod(calmz2,dppm,matdf[matdf$out,],model="emax")
+  ### fit segments+estimate breakpoints
+  mod=segmented(lm(dppm~calmz,data=matdf,subset = out),seg.Z = ~calmz)
+  out=car:::outlierTest(lm(resid(mod)~1), cutoff=0.05,n.max=10)
+  if(any(out$signif)){
+    matdf[names(out$bonf.p),]$out=FALSE
+    mod=segmented(lm(dppm~calmz,data=matdf,subset = out),seg.Z = ~calmz)
+  }
+  
+  ### Regressing around breakpoint
+  calpars<-c(a=unname(coef(mod)[1]),b=unname(coef(mod)[2]),c=unname(coef(mod)[3]),brk=unname(mod$psi[2]),low=calInt[1],high=calInt[2])
+  calfct<-function(x,pars,round=3){
+    pr=pars["a"]+pars["b"]*x
+    pr[x>pars["brk"]]=(pr+pars["c"]*(x-pars["brk"]))[x>pars["brk"]]
+    pr[x<pars["low"]]=pars["a"]+pars["b"]*pars["low"]
+    pr[x>pars["high"]]=pars["a"]+pars["b"]*pars["high"]+pars["c"]*(pars["high"]-pars["brk"])
+    round(pr,round)
+  }
+  
+  ### Flat after breakpoint
+  if(typ==2){
+    fct2<-function(x,a,b,brk) ifelse(x <= brk, a+b * x, a+b*brk)
+  m <- try(nls(dppm ~ fct2(calmz,a,b,brk),
+               start = list(a = calpars["a"], b = calpars["b"],brk=calpars["brk"]),
+               data=matdf,subset = out),TRUE)
+  if(!"try-error"%in%class(m)){
+    calpars<-c(coef(m),low=calInt[1])
+  calfct<-function(x,pars,round=3){
+    pr=ifelse(x <= pars["brk"], pars["a"]+pars["b"]*x, pars["a"]+pars["b"]*pars["brk"])
+    pr[x<pars["low"]]=pars["a"]+pars["b"]*pars["low"]
+    round(pr,round)
+  }
+  }
+  }
+  
+  if(typ==3){
+  fct2<-function(x,a,b,brk)  b*(x >= brk) + (b - (a/2) * (brk-x)^2) * (x < brk)
+  b=median(matdf$dppm[matdf$calmz>calpars["brk"] & matdf$out])
+  a=unname(coef(lm(dppm~I(calmz^2),data=matdf,subset = out))[2])
+  m <- try(nls(dppm ~ fct2(calmz,a,b,brk),
+               start = list(a = a, b = b,brk=calpars["brk"]),
+               data=matdf,subset = out),TRUE)
+  if(!"try-error"%in%class(m)){
+    calpars<-c(coef(m),low=calInt[1],high=calInt[2])
+    calfct<-function(x,pars,round=3){
+      pr= pars["b"]*(x >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x)^2) * (x <  pars["brk"])
+      x2=pars[c("low","high")]
+      pr2= pars["b"]*(x2 >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x2)^2) * (x2 <  pars["brk"])
+      pr[x<pars["low"]]=pr2[1]
+      pr[x>pars["high"]]=pr2[2]
+      round(pr,round)
+    }
+  }
+}
+  
+  
+  
   
   if(doPlot){
     xl=pretty(range(c(matdf$calmz,calInt)))
-    pred=predict(mod,predType = "full-model",newdata = data.frame(calmz=min(xl):max(xl)))
+    pred=calfct(min(xl):max(xl),calpars)
     yl=pretty(range(c(matdf$dppm,0,pred),na.rm=T))
     plot(matdf$calmz,matdf$dppm,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="delta ppm")
     abline(h=-1:1,lty=c(2,1,2))
+    abline(v=calpars["brk"],col="grey",lwd=2)
+    abline(v=calpars[names(calpars)%in%c("low","high")],col="grey",lwd=1,lty=2)
+    
     axis(2,at=yl,las=2,pos=min(xl));axis(1,at=xl,pos=min(yl))
-    lines(min(xl):max(xl),pred)
+    lines(min(xl):max(xl),pred,col=2,lwd=2)
   }
-  
+  list(mat=matdf,calfct=calfct,calpars=calpars)
   # mod=scam(dppm~s(calmz,bs="mpi",m=2),family=gaussian(link="identity"),data=matdf[matdf$out,],not.exp=FALSE)
   # modd=scam(dppm~s(calmz,bs="mpd",m=2),family=gaussian(link="identity"),data=matdf[matdf$out,],not.exp=FALSE)
   # if(modd$gcv.ubre<mod$gcv.ubre) mod=modd
   
-  pred=predict(mod,predType = "full-model",newdata = data.frame(calmz=1:ceiling(max(xRaw@mzrange))))
-  names(pred)=1:ceiling(max(xRaw@mzrange))
-  n1=max(calInt[1],ceiling(min(matdf$calmz[matdf$out])))
-  n2=min(calInt[2],floor(max(matdf$calmz[matdf$out])))
-  pred=pred[n1:n2]
-  list(mat=matdf,pred=pred,coef=c(coef(mod),n1=n1,n1dppm=unname(pred[1]),n2=n2,n2dppm=unname(rev(pred)[1])))
+  # pred=predict(mod,predType = "full-model",newdata = data.frame(calmz=1:ceiling(max(xRaw@mzrange))))
+  # names(pred)=1:ceiling(max(xRaw@mzrange))
+  # n1=max(calInt[1],ceiling(min(matdf$calmz[matdf$out])))
+  # n2=min(calInt[2],floor(max(matdf$calmz[matdf$out])))
+  # pred=pred[n1:n2]
+#  list(mat=matdf,pred=pred,coef=c(coef(mod),n1=n1,n1dppm=unname(pred[1]),n2=n2,n2dppm=unname(rev(pred)[1])))
 }
 
 ######################################################################################
@@ -81,29 +137,22 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
 #' @rdname .MGcorrRawPPM-methods
 #' @import xcms
 #' @export
-setGeneric(name=".MGcorrRawPPM",def=function(object,addppm) standardGeneric(".MGcorrRawPPM"))
+setGeneric(name=".MGcorrRawPPM",def=function(object,calfct,calpars) standardGeneric(".MGcorrRawPPM"))
 
 
 #' @rdname .MGcorrRawPPM-methods
 #' @aliases .MGcorrRawPPM
 setMethod(".MGcorrRawPPM","xcmsRaw",
-          .MGcorrRawPPM<-function(object,addppm){
-            ## single point calibration
-            ## if vector, names must match the correspongi m/z
-            
-            #  xRaw2=xRaw
+          .MGcorrRawPPM<-function(object,calfct,calpars){
+            ## based on calibration function/parameeters
+
             scsten=cbind(object@scanindex+1,c(object@scanindex[-1],length(object@env$intensity)))
             rownames(scsten)=1:length(object@scanindex)
-            lmz=c(floor(object@mzrange[1]-.5),ceiling(object@mzrange[2]+.5)+1)
-            if(lmz[1]>1) lmz[1]=lmz[1]-1
-            lmz=lmz[1]:lmz[2]
-            ### Fix add ppm
-            if(length(addppm)==1) addppm=rep(round(addppm,3),length(lmz)) else   addppm=round(approx(as.numeric(names(addppm)),addppm,lmz,yleft = addppm[1],yright = rev(addppm)[1])$y,3)
-            
+
             newmz=object@env$mz
             for(ix in rownames(scsten)){
               oldy<-xcms:::getScan(object,as.numeric(ix))[,1]
-              ppmy<- 1-approx(lmz,addppm,oldy)$y *10^-6
+              ppmy<- 1-calfct(oldy,calpars) *10^-6
               #              ppmy<- 1-addppm*10^-6
               newy=round(oldy*ppmy,6)
               newmz[scsten[ix,1]:scsten[ix,2]]=newy

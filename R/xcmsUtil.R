@@ -65,32 +65,6 @@ setGeneric(name="satremXcmsRaw",def=function(object,reso,typ,inthr,rtlim) standa
 setMethod("satremXcmsRaw","xcmsRaw",
           satremXcmsRaw<-function(object,reso=70000,typ=2,inthr=0,rtlim=c(-Inf,Inf)){
             
-            .infctremmz<-function(re,reso,typ=2){
-          #    print(reso)
-              if(is.na(reso)) return(c())
-              m=re[,1]
-              v=re[,2]
-              
-              if(typ==1) unique(unlist(lapply(1:length(m),function(i){
-                m0=m[i]
-                gamma=m0/reso
-                v1=v[i]*(gamma^2)/(gamma^2+(m-m0)^2)
-                which(v<(0.99*v1))})))
-              
-              if(typ==2) unique(unlist(lapply(1:length(m),function(i){
-                m0=m[i]
-                gamma=m0/reso
-                v1=v[i]*(gamma^2)/(gamma^2+(m-m0)^2)
-                gamma2=m0/(reso*0.05)
-                v2=0.05*v[i]*(gamma2^2)/(gamma2^2+(m-m0)^2)
-                # l=which(v1<(0.05*v[i]))
-                # v1[l]=v2[l]
-                which(v<(0.99*v1) | v<(0.99*v2))})))
-              
-              
-            }
-            
-            
             scsten=cbind(object@scanindex+1,c(object@scanindex[-1],length(object@env$intensity)))
             rownames(scsten)=1:length(object@scanindex)
             
@@ -103,7 +77,7 @@ setMethod("satremXcmsRaw","xcmsRaw",
               l2excl=which(re[,2]<inthr)
               nrm1=nrm1+length(l2excl)
               if(length(l2excl)>0) re=re[-l2excl,,drop=F]
-              l2excl=.infctremmz(re,reso,typ)
+              l2excl=satremoval(re,reso,typ)
               nrm2=nrm2+length(l2excl)
               if(length(l2excl)>0) re=re[-l2excl,,drop=F]
               if(nrow(re)==0) next
@@ -144,6 +118,34 @@ setMethod("satremXcmsRaw","xcmsRaw",
           
 )
 ######################################################################################
-
+#' @param re matrix of mz/int
+#' @param reso mass resolution
+#' @param typ 1/2 extended
+#' @return ids of entries to be remove
+#' @export
+satremoval<-function(re,reso,typ=2){
+  #    print(reso)
+  if(is.na(reso)) return(c())
+  m=re[,1]
+  v=re[,2]
+  
+  if(typ==1) unique(unlist(lapply(1:length(m),function(i){
+    m0=m[i]
+    gamma=m0/reso
+    v1=v[i]*(gamma^2)/(gamma^2+(m-m0)^2)
+    which(v<(0.99*v1))})))
+  
+  if(typ==2) unique(unlist(lapply(1:length(m),function(i){
+    m0=m[i]
+    gamma=m0/reso
+    v1=v[i]*(gamma^2)/(gamma^2+(m-m0)^2)
+    gamma2=m0/(reso*0.05)
+    v2=0.05*v[i]*(gamma2^2)/(gamma2^2+(m-m0)^2)
+    # l=which(v1<(0.05*v[i]))
+    # v1[l]=v2[l]
+    which(v<(0.99*v1) | v<(0.99*v2))})))
+  
+  
+}
 
 

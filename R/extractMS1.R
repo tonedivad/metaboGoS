@@ -11,6 +11,7 @@
 #' @param blList list of blank filles xcmsRaw object 
 #' @param nSlaves number of slaves for parallel
 #' @param useMS1file use the MS1 scan in MS1file
+#' @param keepOld keep the former RoiInfos data frame
 #' @import foreach
 #' @import doParallel
 #' @return metaboGoS obj with RoiInfos / PeakInfos /params
@@ -18,9 +19,9 @@
 refinePIRoi<-function(obj,
                        parDeco, #=list(span=7,bw=0.01,minNoiseMS1=10000),
                        refFct=metaboGoS:::.MGrefFct0,
-                      doPlot=TRUE,blList=NULL, nSlaves=1,useMS1file=TRUE){
+                      doPlot=TRUE,blList=NULL, nSlaves=1,useMS1file=TRUE,keepOld=TRUE){
   
-  ## doPlot=TRUE;blList=NULL;nSlaves=1;useMS1file=TRUE
+  ## blList=NULL;nSlaves=1;useMS1file=TRUE;doPlot=TRUE
   
   if(!"ddaSet"%in%class(obj)) stop("Error: not a ddaSet object")
   
@@ -66,6 +67,7 @@ refinePIRoi<-function(obj,
   if(length(lmiss)) stop(paste0('Missing parameters: ',paste(lmiss,sep=" ")))
   
   ROImat=obj$RoiInfos
+  if(keepOld) obj$OldRoiInfos=obj$RoiInfos
   if(is.null(ROImat)) stop('Matrix defing ROI is missing!')
   ########  ########  ########
   
@@ -90,19 +92,21 @@ refinePIRoi<-function(obj,
         eic=GRMeta:::.GRrawMat(xr,mzrange = lmz, rtrange = lrt*60,padsc =TRUE)
         if(sum(!is.na(eic[,"y"]))<2) return(list())
         if(max(eic[,"y"],na.rm=T)<parDeco$minHeightMS1) return(list())
+        eicbl=NULL
         if(length(blList)>0){
-          eicbl=do.call("rbind",lapply(1:length(blList),function(i){
-            i=cbind(GRMeta:::.GRrawMat(blList[[i]],mzrange = lmz, rtrange = lrt*60,padsc =TRUE),blid=i)
+          eicbl=do.call("rbind",lapply(1:length(blList),function(ibl){
+            i=cbind(GRMeta:::.GRrawMat(blList[[ibl]],mzrange = lmz, rtrange = lrt*60+c(-10,10),padsc =T),blid=ibl)
             if(sum(!is.na(i[,"mz"]))<5) return(NULL)
-            i}))
-        } else eicbl=NULL
+            i
+          }))
+        }
         eic=cbind(eic,sc2nrt[eic[,"scan"],2:3])
-        re=may(eic,eicbl,parDeco,idx,doPlot = FALSE)
+        re=refFct(eic,eicbl,parDeco,idx,doPlot = FALSE) ## 
         if(is.null(re)) return(list())
         re
     }
   ## Serial bit
-  if(nSlaves<=1) for(idx in  ll[grep("175",ll)]){
+  if(nSlaves<=1) for(idx in  ll){
     if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
     lmz=range(ROImat[idx,c("mzmin","mzmax")])
     lrt=range(ROImat[idx,c("rtmin","rtmax")])+c(-3,3)*parDeco$psdrt*(parDeco$span+1) ## add 3*span to make use not in the downslope
@@ -118,7 +122,7 @@ refinePIRoi<-function(obj,
         }))
     }
     eic=cbind(eic,sc2nrt[eic[,"scan"],2:3])
-    re=.MGrefFct0(eic,eicbl,parDeco,idx,doPlot = doPlot) ## change here + update the 
+    re=refFct(eic,eicbl,parDeco,idx,doPlot = doPlot) ## change here + update the 
     if(is.null(re)) next
     llre=c(llre,list(re))
   }
@@ -132,34 +136,37 @@ refinePIRoi<-function(obj,
     return(obj)
   }
   ares=do.call("rbind",llre)
+  ares=ares[which(ares$pk.rt>=parDeco$rtlim[2] & ares$pk.rt<=parDeco$rtlim[3]),]
   
-  ## split in pk & roi + add selection on coda
   
-  ares$rtmin[ares$rtmin<min(parDeco$rtlim)]=min(parDeco$rtlim)
-  ares$rtmax[ares$rtmax>max(parDeco$rtlim)]=max(parDeco$rtlim)
-  ares$roi0=ares$roi
-  ares$RoiId=ares$newroi
-  cat(" -- number of Peaks/ROIs after refinement: ",nrow(ares)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
+  ## Peak matrix
+  lvar=unique(c("pk.id","cl.id","roi.id",names(ares)[c(grep("pk\\.",names(ares)))]))
+  PKmat=ares[,lvar]
+  names(PKmat)[1:3]=c("PkId",'ClId','RoiId')
+  names(PKmat)=gsub("^pk.","",names(PKmat))
+  ldups=names(which(table(PKmat$PkId)>1))
+  for(i in ldups) PKmat$PkId[PKmat$PkId==i]=paste0(PKmat$PkId[PKmat$PkId==i],"-",1:sum(PKmat$PkId==i))
   
-  lvar=c('RoiId',"rtmin","rtmax","rt","mz50","mz10","mz90", "mz","intensity" ,"mzmin","mzmax","coda")
-  ROImat2=ares[tapply(1:nrow(ares),ares$RoiId,function(x) x[which.max(ares[x,"intensity"])]),lvar,drop=F]
+  ## ROimatrix
+  lvar=unique(c("roi.id",names(ares)[grep("^roi",names(ares))]))
+  ROImat2=ares[,lvar]
+  names(ROImat2)[1]=c('RoiId')
+  names(ROImat2)=gsub("^roi.","",names(ROImat2))
+  add2roi=do.call("rbind",tapply(1:nrow(PKmat),PKmat$RoiId,
+                                 function(x) round(c(max(PKmat$int.ap[x]),max(PKmat$sbr[x]),round(range(PKmat[x,c("mzmin",'mzmax')]),5),
+                                 rt=PKmat$rtap[x[which.max(PKmat$int.ap[x])]],range(PKmat[x,c("rtmin",'rtmax')])),4)))
+  colnames(add2roi)=c('intensity',"sbr","mzmin","mzmax","rt","rtmin","rtmax")
+  ROImat2=cbind(ROImat2[match(rownames(add2roi),ROImat2$RoiId),],add2roi)
+  cat(" -- number of Peaks/ROIs after refinement: ",nrow(PKmat),"/",nrow(ROImat2)," [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
+  
   l2k=which(ROImat2[,"intensity"]>=parDeco$minHeightMS1 & abs(ROImat2[,"rtmax"]-ROImat2[,"rtmin"])>=parDeco$minRTwin &
-              ROImat2[,"rtmin"]<=max(parDeco$rtlim) & ROImat2[,"rtmax"]>=min(parDeco$rtlim))
+              ROImat2[,"rtmin"]<=max(parDeco$rtlim) & ROImat2[,"rtmax"]>=min(parDeco$rtlim) & ROImat2$coda>0.2 & ROImat2$sbr>=2)
   ROImat2=ROImat2[l2k,,drop=F]
   ROImat2=ROImat2[order(ROImat2[,'mz50'],ROImat2[,"rtmin"]),,drop=F]
   rownames(ROImat2)=ROImat2$RoiId #sprintf("R%.4f@%.1f-%.1f",ROImat2[,"mz50"],ROImat2[,"rtmin"],ROImat2[,"rtmax"])
 
-  
-  ## merge peaks
-#  ares$RoiId=ROImat2$RoiId[match(ares$roi,ROImat2$roi)]
-  lvar=unique(c('RoiId',"pk.cl",names(ares)[c(grep("pk\\.",names(ares)),grep("ap\\.",names(ares)))]))
-  PKmat=ares[,lvar]
-  PKmat=PKmat[order(round(PKmat[,'ap.mz']),PKmat[,'RoiId'],PKmat[,"pk.cl"]),,drop=F]
-  newid=sprintf("%.4f@%.3f",PKmat$ap.mz,PKmat$pk.loc)
-  ldups=names(which(table(newid)>1))
-  for(i in ldups) newid[which(newid==i)]=sprintf("%.4f-%d@%.3f",PKmat$ap.mz[which(newid==i)],1:sum(newid==i),PKmat$pk.loc[which(newid==i)])
-  
-  PKmat$PkId=rownames(PKmat)=newid
+  PKmat=PKmat[which(PKmat$RoiId%in%ROImat2$RoiId),]
+  rownames(PKmat)=PKmat$PkId
  
   ###########################
   ### Associate MS/MS to ROI
@@ -169,32 +176,37 @@ refinePIRoi<-function(obj,
   llsplit=split(1:nrow(oMS2ROI), ceiling(seq_along(1:nrow(oMS2ROI))/200))
   Roi2sp=do.call("rbind",lapply(llsplit,function(x){
     ddmz=outer(oMS2ROI$mzPrec[x],ROImat2[,"mzmin"],"-")>=(-parDeco$dmz/2) & outer(oMS2ROI$mzPrec[x],ROImat2[,"mzmax"],"-")<=(parDeco$dmz/2) ## slight padding zeros instaeds?
-    ddrt=outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmin"],"-")>=0 & outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmax"],"-")<=0
+    ddrt=outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmin"],"-")>=-(parDeco$minRTwin*2) & outer(oMS2ROI$rtPrec[x],ROImat2[,"rtmax"],"-")<=(parDeco$minRTwin*2)
     re=which(ddrt & ddmz,arr=T)
     re[,1]=x[re[,1]]
     re}))
   # col: ROImat2, row=oMS2ROI
   nMS2ROI=oMS2ROI[Roi2sp[,"row"],]
   nMS2ROI$RoiId=ROImat2$RoiId[Roi2sp[,"col"]]
+  nMS2ROI=nMS2ROI[,which(!names(nMS2ROI)%in%c("RoiPkCl" , "PkId", "OldRoiId"))]
   
   ### Add Peak to spectra
-  nMS2ROI$PkId=nMS2ROI$RoiPkCl=NA
+ # oMS2ROI=obj$MS2toMS1=NA
   llsplit=tapply(1:nrow(nMS2ROI),nMS2ROI$RoiId,c)
   Pk2sp=do.call("rbind",lapply(llsplit,function(x){
     iroi=nMS2ROI$RoiId[x][1]
     l=which(PKmat$RoiId==iroi)
     if(length(l)==0) return(NULL)
-    re=which(outer(nMS2ROI$rtPrec[x],PKmat$pk.left[l],"-")>=0 & outer(nMS2ROI$rtPrec[x],PKmat$pk.right[l],"-")<=0,arr=T)
+    re=which(outer(nMS2ROI$rtPrec[x],PKmat$rtmin[l],"-")>=(-parDeco$minRTwin*4) & outer(nMS2ROI$rtPrec[x],PKmat$rtmax[l],"-")<=(parDeco$minRTwin*4),arr=T)
     re[,1]=x[re[,1]]
     re[,2]=l[re[,2]]
     re}))
   # col: peak, row=nMS2ROI
   
-  fMS2ROI=nMS2ROI[Pk2sp[,1],c("SpId","RoiId","RoiPkCl",'PkId',"PInt","yPrec","mzPrec", "rtPrec")]
+  fMS2ROI=nMS2ROI[Pk2sp[,1],c("SpId","RoiId","PInt","yPrec","mzPrec", "rtPrec")]
   fMS2ROI$PkId=PKmat$PkId[Pk2sp[,2]]
-  fMS2ROI$RoiPkCl=PKmat$pk.cl[Pk2sp[,2]]
+  fMS2ROI$ClId=PKmat$ClId[Pk2sp[,2]]
   l2add=which(!(1:nrow(nMS2ROI))%in%Pk2sp[,1])
-  if(length(l2add)) fMS2ROI=rbind(fMS2ROI,nMS2ROI[l2add,c("SpId","RoiId","RoiPkCl",'PkId',"PInt","yPrec","mzPrec", "rtPrec")])
+  if(length(l2add)){
+    l2add=nMS2ROI[l2add,c("SpId","RoiId","PInt","yPrec","mzPrec", "rtPrec")]
+    l2add$ClId=l2add$PkId=NA
+    fMS2ROI=rbind(fMS2ROI,l2add)
+  }
   fMS2ROI=fMS2ROI[order(fMS2ROI$mzPrec,fMS2ROI$rtPrec,fMS2ROI$RoiId,fMS2ROI$PkId),]
   rownames(fMS2ROI)=NULL
  
@@ -202,9 +214,6 @@ refinePIRoi<-function(obj,
       " --> Final number of peaks: ",nrow(PKmat)," assoc. to ",length(unique(fMS2ROI$SpId[!is.na(fMS2ROI$PkId)])),"/",nrow(obj$MS2Infos)," MS/MS",
       " [+",as.integer(as.POSIXct( Sys.time() ))-strt,"sec.]\n",sep="")
   
-  lvar=c( "PkId", "pk.cl" , "RoiId" )
-  PKmat=PKmat[,c(lvar,names(PKmat)[!names(PKmat)%in%lvar])]
-  names(PKmat)[2]="RoiPkCl"
   
   obj$RoiInfos=ROImat2
   obj$PeakInfos=PKmat

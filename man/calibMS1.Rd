@@ -6,7 +6,7 @@
 some stufff}
 \usage{
 calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 11,
-  bkpoint = median(calInt), calInt = c(80, 350))
+  bkpoint = median(calInt), calInt = c(70, 500), typ = 1, doPlot = T)
 }
 \arguments{
 \item{filein}{Path to the input file}
@@ -22,6 +22,8 @@ calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 11,
 \item{bkpoint}{breakpoint mass to calculate robust regression}
 
 \item{calInt}{calibration interval to compute}
+
+\item{doPlot}{should plot}
 }
 \value{
 xcms

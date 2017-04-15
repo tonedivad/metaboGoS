@@ -13,31 +13,34 @@
 #' @param verbose Print stuff out
 #' @param useSid Add sid to the spectra names
 #' @param rtlim Limit MS/MS to a certain range
-##' @param MinIntBP Minimum MS/MS basepeak  height
+##' @param parDeco List of decoParams
 #' @return List of list
 #' @export
-parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,outfile=NULL,stype=NA,roundmz=6,verbose=T,useSid=FALSE,rtlim=c(-Inf,Inf)){
+parseOneDDA<-function(cefi,parDeco=NULL,add2File=NULL,defIsolation=0.501,calibFct=NULL,cleanMS2=TRUE,
+                      save=FALSE,outfile=NULL,roundmz=6,verbose=T,
+                      sid=add2File$Sid,useSid=!is.null(sid),stype=NULL,rtlim=suppressWarnings(range(parDeco$rtlim))){
   
   # sid=NULL;stype=NA;method="qn";roundmz=5;winsize=0.51;dppm=30;dmz=0.01;verbose=T;save=FALSE;outfile=NULL;useSid=FALSE;rtlim=c(.6,14.5);MinIntBP=1000
   
   ### only one CE !!!! -> to expand diff SP==1
-
+  
   ##  ##  ##  ## File
   # completionTime=NA
   # cefiraw=paste0(sub("([^.]+)\\.[[:alnum:]]+$", "\\1", cefi),c(".raw",".Raw",".RAW"))
   # cefiraw=cefiraw[file.exists(cefiraw)]
   # if(length(cefiraw)>0) completionTime=as.chron(file.info(cefiraw)[,"mtime"], format = c(dates = "Y-M-D", times = "h:m:s"))
   # 
-  if(is.null(sid)) sid=gsub(".*/","",gsub("\\..*","",gsub(" ","",cefi)))
+  if(is.null(sid))
+    sid=ifelse(is.null(add2File$Sid),gsub(".*/","",gsub("\\..*","",gsub(" ","",cefi))),add2File$Sid[1])
   if(nchar(sid)==0) sid=gsub(".*/","",gsub(" ","",cefi))
-  if(is.na(stype)){
+  if(is.null(stype)) if(is.null(add2File$sType)){
     if(grepl("^([blBLQCcSTDstda]+)_.*",sid)) stype=gsub("^([blBLQCcSTDstda]+)_.*","\\1",sid)
     if(grepl("^([blBLQCcSTDstda]+)_.*",cefi)) stype=gsub("^([blBLQCcSTDstda]+)_.*","\\1",cefi)
     if(grepl("/([blBLQCcSTDstda]+)_.*",cefi)) stype=gsub(".*/([blBLQCcSTDstda]+)_.*","\\1",cefi)
-  }
-  if(nchar(sid)==0){sid="unknwon";stype="unk"}
+  } else stype=add2File$sType
+  if(nchar(sid)==0){sid="unksamp"}
   if(sum(nchar(stype),na.rm=T)==0) stype="Unk"
-  if(verbose) cat("Parsing the XML file '",cefi,"' for sample '",sid,"' of type '",stype,sep="")
+  if(verbose) cat("Parsing the XML file '",cefi,"' for sample '",sid,"' of type '",stype,"'",sep="")
   
   File=data.frame(Sid=sid,dirName=dirname(normalizePath(cefi)),fileName=basename(normalizePath(cefi)))
   if(!is.null(add2File)) for(i in names(add2File)[!names(add2File)%in%names(File)]) File[,i]=add2File[i]
@@ -46,7 +49,7 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   ####################
   doc <- xmlRoot(xmlParse(cefi, useInternal = TRUE))
   tmp=xmlChildren(doc[[1]])
-
+  
   softtype=NA
   convsoft=tmp[[which(names(tmp)=="dataProcessing")]]
   if(any(grepl("Proteo",xmlAttrs(xmlChildren(convsoft)$software)))) softtype="ProteoWizard"
@@ -104,6 +107,15 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   
   if(verbose) cat(' -- found ', sum(ascan$msLevel==1) ," MS1 and ", sum(ascan$msLevel==2) ," MS2\n",sep="")
   
+  ### calibrate ascan$precursorMz
+  l2cal=which(ascan$msLevel!="1")
+  if(length(l2cal) & !is.null(calibFct)){
+    if(verbose) cat('  -- calibrating precursor ions\n')
+    addppm=calibFct$calfct(ascan$precursorMz[l2cal],calibFct$calpars)
+    ascan$precursorMz[l2cal]=round(ascan$precursorMz[l2cal]*(1-addppm *10^-6),roundmz)
+    print(summary(addppm))
+  }
+  
   ### name windows
   toadd=ifelse(useSid,paste0("-",sid),"")
   ascan$SpId=sprintf("SP%.4f@%.3f%s",ascan$precursorMz,ascan$retentionTime,toadd)
@@ -117,12 +129,18 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   sc2sp=tapply(ascan$ScMS1,ascan$num,c)
   apks=mzR::peaks(tmp)
   l2use=which(sapply(apks,nrow)>0)
-  for(i in l2use) apks[[i]]=cbind(sc=i,mz=apks[[i]][,1],y=apks[[i]][,2],sp=sc2sp[i])
+  for(i in l2use){
+    imz=apks[[i]][,1]
+    if(length(imz)<5) next
+    if(!is.null(calibFct)) imz=round(imz*(1-calibFct$calfct(imz,calibFct$calpars) *10^-6),roundmz)
+    apks[[i]]=cbind(sc=i,mz=imz,y=apks[[i]][,2],sp=sc2sp[i])
+  }
+  
   
   #### Reduce based on RT/minInt MS2
   lsp=range(ascan$ScMS1[ascan$retentionTime>=rtlim[1] & ascan$retentionTime<=rtlim[2] & ascan$ScanMode=="Scan"])
   l2use=which(ascan$ScMS1%in%(lsp[1]:lsp[2]))
-#  l2excl=which(ascan$BPInt<MinIntBP & ascan$ScanMode=="ProductIon")
+  #  l2excl=which(ascan$BPInt<MinIntBP & ascan$ScanMode=="ProductIon")
   # l2excl=which(ascan$ScanMode=="ProductIon")
   # if(length(l2excl)>0) l2use=l2use[!l2use%in%l2excl]
   ascan=ascan[l2use,]
@@ -131,6 +149,33 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   l=which(ascan$ScanMode=="ProductIon")
   infms2=ascan[l,]
   MS2Dat=tapply(1:nrow(infms2),infms2$SpId,function(x) do.call("rbind",apks[infms2$num[x]]))
+
+  ################# Cleaning
+  #   if(i%in%lperc) cat("x")
+  if(cleanMS2){
+    l2use=which(sapply(MS2Dat,nrow)>4)
+    lperc=l2use[round(seq(1,length(l2use),length=12)[2:11])]
+    ntot=sum(sapply(MS2Dat,nrow))
+    n=0;l2remove=c()
+    if(verbose) cat(' --- cleaning MS/MS: ',sep='')
+    for(i in l2use){
+      if(i%in%lperc) cat("x")
+      isp=MS2Dat[[i]]
+      l2rem=c()
+      if(!is.null(parDeco$minNoiseMS2)) l2rem=which(isp[,"y"]<parDeco$minNoiseMS2)
+      if(!is.null(parDeco$limintMS2)) l2rem=unique(c(l2rem,which((isp[,"y"]/max(isp[,"y"]))<parDeco$limintMS2)))
+      n=n+length(l2rem)
+      if(length(l2rem)>0) isp=isp[-l2rem,,drop=F]
+      if(nrow(isp)<5){MS2Dat[[i]]=isp;next}
+      l2rem=c()
+      if(!is.null(parDeco$resoMS2)) if(min(diff(isp[,"mz"]))<0.5) l2rem=satremoval(isp[,c("mz","y")],reso=parDeco$resoMS2)
+      n=n+length(l2rem)
+      if(length(l2rem)>0) isp=isp[-l2rem,,drop=F]
+      MS2Dat[[i]]=isp
+    }
+    MS2Dat=MS2Dat[which(sapply(MS2Dat,nrow)>4)]
+    if(verbose) cat(' -> removed ions ',n,'/',ntot,'\n',sep='')
+  }
   
   lv1=c("num" , "ScMS1","SpId", "msLevel","retentionTime","polarity","activationMethod","collisionEnergy",  'windowWideness',"lowMz","highMz", 
         "precursorCharge","precursorMz","precursorIntensity" ,"basePeakIntensity"  ,"totIonCurrent")
@@ -143,9 +188,12 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   MS2Infos$WinSize[which(is.na(MS2Infos$WinSize))]=defIsolation
   MS2Infos$WinSize=as.numeric(MS2Infos$WinSize)
   rownames(MS2Infos)=infms2$SpId
-
-    ###### Finalise
+  MS2Infos=MS2Infos[which(MS2Infos$SpId%in%names(MS2Dat)),]
+  lso=order(MS2Infos$ScMS1,MS2Infos$RT,MS2Infos$PrecMZ)
+  MS2Infos=MS2Infos[lso,]
+  MS2Dat=MS2Dat[MS2Infos$SpId]
   
+  ###### Finalise
   if(verbose) cat(' --> Final number of MS2 spectra: ', nrow(MS2Infos) ," between ",sprintf('%.3f-%.3f',min(MS2Infos$RT),max(MS2Infos$RT))," min.\n",sep="")
   
   ##  ##  ##  ## Scan2rt
@@ -154,8 +202,7 @@ parseOneDDA<-function(cefi,sid=NULL,add2File=NULL,defIsolation=0.501,save=FALSE,
   Scan2rt=matrix(sc2rt,nrow=1,dimnames = list(sid,1:length(sc2rt)))
   
   ##  ##  ##  ##
-  lso=order(MS2Infos$ScMS1,MS2Infos$RT,MS2Infos$PrecMZ)
-  obj=list(File=File,MS2Infos=MS2Infos[lso,],MS2Data=MS2Dat[lso],Scan2rt=Scan2rt)
+  obj=list(File=File,MS2Infos=MS2Infos,MS2Data=MS2Dat,Scan2rt=Scan2rt,calibFct=calibFct,parDeco=parDeco)
   class(obj) = append(class(obj), "ddaSet")
   if(save & is.null(outfile)) save(file=paste0(sub("([^.]+)\\.[[:alnum:]]+$", "\\1", cefi),".rda"),obj)
   if(!is.null(outfile)) save(file=outfile,obj)

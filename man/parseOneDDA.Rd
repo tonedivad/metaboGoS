@@ -4,14 +4,15 @@
 \alias{parseOneDDA}
 \title{Load DDA run from a mzXML file}
 \usage{
-parseOneDDA(cefi, sid = NULL, add2File = NULL, defIsolation = 0.501,
-  save = FALSE, outfile = NULL, stype = NA, roundmz = 6, verbose = T,
-  useSid = FALSE, rtlim = c(-Inf, Inf))
+parseOneDDA(cefi, parDeco = NULL, add2File = NULL, defIsolation = 0.501,
+  calibFct = NULL, cleanMS2 = TRUE, save = FALSE, outfile = NULL,
+  roundmz = 6, verbose = T, sid = add2File$Sid, useSid = !is.null(sid),
+  stype = NULL, rtlim = suppressWarnings(range(parDeco$rtlim)))
 }
 \arguments{
 \item{cefi}{Path to the input file}
 
-\item{sid}{Sample id to given}
+\item{parDeco}{List of decoParams}
 
 \item{add2File}{Additional information to complement the file infos}
 
@@ -21,17 +22,17 @@ parseOneDDA(cefi, sid = NULL, add2File = NULL, defIsolation = 0.501,
 
 \item{outfile}{Filename to save}
 
-\item{stype}{Sample type}
-
 \item{roundmz}{Rounding for the mass}
 
 \item{verbose}{Print stuff out}
 
+\item{sid}{Sample id to given}
+
 \item{useSid}{Add sid to the spectra names}
 
-\item{rtlim}{Limit MS/MS to a certain range}
+\item{stype}{Sample type}
 
-\item{MinIntBP}{Minimum MS/MS basepeak  height}
+\item{rtlim}{Limit MS/MS to a certain range}
 }
 \value{
 List of list
