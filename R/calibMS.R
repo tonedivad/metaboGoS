@@ -14,9 +14,9 @@
 #' @import segmented
 #' @return xcms
 #' @export
-calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T){
+calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T,retMat=F){
   
-  # dppm=20;bw=2.5;minpts=11;bkpoint=200;calInt=c(80,350)
+  # dppm=20;bw=2.5;minpts=31;bkpoint=200;calInt=c(80,350)
   cat("Opening ",filein,"\n")
   xRaw=xcmsRaw(filein,includeMSn = FALSE)
   allcal=list()
@@ -36,7 +36,7 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
   matdf$dppm=10^6*(matdf$mz/matdf$calmz-1)
   matdf=matdf[matdf$n>=minpts,]
   matdf=matdf[order(matdf$calmz,matdf$mz),]
-  
+  if(retMat) return(matdf)
   ### estimate outliers around breakpoint
   matdf$res=0
   l1=which(matdf$calmz<=bkpoint)
@@ -50,9 +50,10 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
   ### fit segments+estimate breakpoints
   mod=segmented(lm(dppm~calmz,data=matdf,subset = out),seg.Z = ~calmz)
   out=car:::outlierTest(lm(resid(mod)~1), cutoff=0.05,n.max=10)
-  if(any(out$signif)){
+  while(any(out$signif)){
     matdf[names(out$bonf.p),]$out=FALSE
     mod=segmented(lm(dppm~calmz,data=matdf,subset = out),seg.Z = ~calmz)
+    out=car:::outlierTest(lm(resid(mod)~1), cutoff=0.05,n.max=10)
   }
   
   ### Regressing around breakpoint
@@ -65,8 +66,35 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
     round(pr,round)
   }
   
+  ###
+  fail3=FALSE
+  if(typ==3){
+    fct2<-function(x,a,b,brk)  b*(x >= brk) + (b - (a/2) * (brk-x)^2) * (x < brk)
+    y=matdf$dppm[matdf$out]
+    x=matdf$calmz[matdf$out]
+    b=median(y[x>calpars["brk"]])
+    x=x-(calpars["brk"]*1.2) ## a few more points above the estimatated breakpoint
+    y=y-b
+    a=abs(coef(lm(y[x<0]~I(x[x<0]^2)))[2])*sign(mean(y[x<0]))*-2 ## make sure this is the correct sign
+    m <- try(nls(dppm ~ fct2(calmz,a,b,brk),
+                 start = list(a = a, b = b,brk=calpars["brk"]),
+                 data=matdf,subset = out),TRUE)
+    if(!"try-error"%in%class(m)){
+      calpars<-c(coef(m),low=calInt[1],high=calInt[2])
+      calfct<-function(x,pars,round=3){
+        pr= pars["b"]*(x >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x)^2) * (x <  pars["brk"])
+        x2=pars[c("low","high")]
+        pr2= pars["b"]*(x2 >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x2)^2) * (x2 <  pars["brk"])
+        pr[x<pars["low"]]=pr2[1]
+        pr[x>pars["high"]]=pr2[2]
+        round(pr,round)
+      }
+    } else fail3=TRUE
+  }
+  
+  
   ### Flat after breakpoint
-  if(typ==2){
+  if(typ==2 | fail3){
     fct2<-function(x,a,b,brk) ifelse(x <= brk, a+b * x, a+b*brk)
   m <- try(nls(dppm ~ fct2(calmz,a,b,brk),
                start = list(a = calpars["a"], b = calpars["b"],brk=calpars["brk"]),
@@ -80,27 +108,7 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=11,bkpoint=median(calIn
   }
   }
   }
-  
-  if(typ==3){
-  fct2<-function(x,a,b,brk)  b*(x >= brk) + (b - (a/2) * (brk-x)^2) * (x < brk)
-  b=median(matdf$dppm[matdf$calmz>calpars["brk"] & matdf$out])
-  a=unname(coef(lm(dppm~I(calmz^2),data=matdf,subset = out))[2])
-  m <- try(nls(dppm ~ fct2(calmz,a,b,brk),
-               start = list(a = a, b = b,brk=calpars["brk"]),
-               data=matdf,subset = out),TRUE)
-  if(!"try-error"%in%class(m)){
-    calpars<-c(coef(m),low=calInt[1],high=calInt[2])
-    calfct<-function(x,pars,round=3){
-      pr= pars["b"]*(x >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x)^2) * (x <  pars["brk"])
-      x2=pars[c("low","high")]
-      pr2= pars["b"]*(x2 >=  pars["brk"]) + (pars["b"] - (pars["a"]/2) * ( pars["brk"]-x2)^2) * (x2 <  pars["brk"])
-      pr[x<pars["low"]]=pr2[1]
-      pr[x>pars["high"]]=pr2[2]
-      round(pr,round)
-    }
-  }
-}
-  
+
   
   
   
