@@ -11,9 +11,9 @@
 #' @return List of list
 #' @rdname CFM
 #' @export
-Cfm2Mgf<-function(ifile,itmp,minpk=3){
+Cfm2Mgf<-function(ifile,itmp,minpk=3,comment=NULL){
   
-  .infct<-function(xtmp,deltaMZ=0.001,whichmz="X1",whichint="X2",keepMax=FALSE){
+  .infct<-function(xtmp,deltaMZ=0.001,whichmz="X1",whichint="X2",keepMax=TRUE){
     # deltaMZ=0.001;whichmz="X1";whichint="X2";keepMax=FALSE;xtmp=tmp
     
     if(nrow(xtmp)<2) return(xtmp)
@@ -33,7 +33,8 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
   }
   
   toconv=c("E0"="low","E1"="mid","E2"="high")
-  tmp=t(sapply(strsplit(scan(ifile,what="raw",sep="\n")," "),function(x) x[1:3]))
+  tmp=t(sapply(strsplit(scan(ifile,what="raw",sep="\n",quiet = T)," "),function(x) x[1:3]))
+  if(ncol(tmp)==0) return(list(itmp['Id'],NULL))
   if(tmp[1,1]=="ERROR") return(list(itmp['Id'],NULL))
   tmp[grep("ener",tmp[,1]),3]=tmp[grep("ener",tmp[,1]),1]
   for(i in which(is.na(tmp[,3]))) tmp[i,3]=tmp[i-1,3]
@@ -45,7 +46,7 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
 
   cmb=.infct(tmp)
   cmb[,3]="cmb"
-  cmb[,2]=round(100*cmb[,2]/sum(cmb[,2]),6)
+  cmb=cmb[which(100*cmb[,2]/sum(cmb[,2]) >0.01),,drop=F]
   cmb[,1]=round(as.numeric(cmb[,1]),5)
   tmp=rbind(tmp,cmb)
   tmp=tmp[tmp[,2]>0.0001,]
@@ -54,13 +55,15 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
   ############
   # header
   header2exp=c('BEGIN IONS',
-               sprintf("PEPMASS=%.5f", itmp['PrecMass']),
+               sprintf("PEPMASS=%.5f", round(itmp['PrecMass'],5)),
                sprintf("CHARGE=%s", itmp['ChargeTop']),
                'SEQ=*..*','NAME=',
                sprintf("IONMODE=%s", itmp['Mod']),
-               paste0("EXACTMASS=",itmp['Mass']),
-               #paste0("SMILES=",itmp$Smiles),
-               'SCANS=1')
+               paste0("EXACTMASS=",round(itmp['Mass'],5)),
+               paste0("MOLFORM=",itmp['Mod']),
+  paste0("SMILES=",itmp$Smiles))
+if(length(comment)) header2exp=c(header2exp,'COM=CFM')
+  header2exp=c(header2exp,'SCANS=1')
   ############
   # loop
   llexp=list()
@@ -83,28 +86,31 @@ Cfm2Mgf<-function(ifile,itmp,minpk=3){
 #' @param root Root file
 #' @return List of list
 #' @export
-ManyCfm2Mgf<-function(mf2exp,what="Neg",fileout=NULL,root){
+ManyCfm2Mgf<-function(mf2exp,what="Neg",fileout=NULL,root,minpk=3,comment=NULL){
   err=c()
   lfi=paste0(root,'/',what,'/',substr(mf2exp$Id,1,2),"/",gsub(";","_",mf2exp$Id),".log")
   
   mf2exp$Mod=ifelse(what=="Pos","Positive","Negative")
   mf2exp$ChargeTop=ifelse(what=="Pos","1+","1-")
-  mf2exp$PrecMass=mf2exp$Mass+ifelse(what=="Pos",1,-1)*1.007227
+  if(!'PrecMass'%in%names(mf2exp)){
+    mf2exp$PrecMass=mf2exp$Mass+ifelse(what=="Pos",1,-1)*1.007227*(mf2exp$Charge!=0)
   mf2exp$PrecMass[mf2exp$Charge==ifelse(what=="Pos",1,-1)]=mf2exp$Mass[mf2exp$Charge==ifelse(what=="Pos",1,-1)]
-  l2exp=(mf2exp$Charge%in%c(ifelse(what=="Pos",1,-1),0) & file.exists(lfi))
+  }
+#  l2exp=(mf2exp$Charge%in%c(ifelse(what=="Pos",1,-1),0) & file.exists(lfi))
+  l2exp=(file.exists(lfi))
   if(any(!l2exp)) err=c(err,as.vector(mf2exp$Id[which(!l2exp)]))
-  allmgf=lapply(which(l2exp),function(i) Cfm2Mgf(lfi[i],itmp=as.vector(mf2exp[i,]),minpk = 3))
+  allmgf=lapply(which(l2exp),function(i) Cfm2Mgf(ifile = lfi[i],itmp=as.vector(mf2exp[i,]),minpk = minpk,comment=comment))
   err=c(err,as.vector(unlist(lapply(allmgf,function(x) if(is.null(x[[2]])) return(x[[1]])))))
   if(is.null(fileout)) return(list(allmgf))
   top=unlist(lapply(allmgf,function(x) x[[2]]),rec=F)
   if(length(top)>1) top[2:length(top)]=lapply(top[2:length(top)],function(x) c("",x))
   if(length(top)>0){
-    cat(unlist(top),file=paste0(fileout,".mgf"),sep="\n")
+    cat(unlist(top[names(top)!="cmb"]),file=paste0(fileout,".mgf"),sep="\n")
     top=top[names(top)=="cmb"]
     if(length(top)>0){
       if(top[[1]][1]=="") top[[1]]=top[[1]][-1]
       # fileout=paste0(root,"/CombCFM/",what,"/",imf,"-cmb.mgf")
-      cat(unlist(top),file=paste0(fileout,"-cmb.mgf"),sep="\n")
+      cat(unlist(top),file=paste0(fileout,"Cmb.mgf"),sep="\n")
     }
   }
   

@@ -5,8 +5,9 @@
 \title{Convert CFM file to MGF
 some stufff}
 \usage{
-calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 11,
-  bkpoint = median(calInt), calInt = c(70, 500), typ = 1, doPlot = T)
+calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 31,
+  bkpoint = median(calInt), calInt = c(70, 500), typ = 1, doPlot = T,
+  retMat = F)
 }
 \arguments{
 \item{filein}{Path to the input file}

@@ -7,9 +7,10 @@
 \title{Convert CFM file to MGF
 some stufff}
 \usage{
-Cfm2Mgf(ifile, itmp, minpk = 3)
+Cfm2Mgf(ifile, itmp, minpk = 3, comment = NULL)
 
-ManyCfm2Mgf(mf2exp, what = "Neg", fileout = NULL, root)
+ManyCfm2Mgf(mf2exp, what = "Neg", fileout = NULL, root, minpk = 3,
+  comment = NULL)
 }
 \arguments{
 \item{ifile}{Path to the input file}
