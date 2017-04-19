@@ -21,8 +21,6 @@ compOneSimCosM(munk, mlib, mztol = 0.1, nMatch = 3, xrankScoremat = NULL,
 \item{idunk}{id of unknown}
 
 \item{idlib}{id of library spectra}
-
-\item{xrankScoremat}{xrankScoremat}
 }
 \value{
 matrix of matches

@@ -2,21 +2,18 @@
 #' @name .MGmultiEICintgrPar
 #' @title multiple integration of several eic
 #' 
-#' stuff
+#' Multicore wrapper for .MGmultiEICintgr
 #'
 #' @param alleicmat eic: list of mz, y, and y2
 #' @param parDeco deconvolution parameter list
-#' @param l2excl refining function
-#' @param doPlot plotting at each step-> for QC check
+#' @param l2excl vector of sample ids to be excluded when refining peak allocations
+#' @param doPlot plotting at each step, vector of 0,1,2 - disabled if run in parallele
 #' @param nSlaves num slaves
 #' @import matrixStats
-#' @import NMF
 #' @return peak matrix data.frame
 #' @export
 .MGmultiEICintgrPar<-function(alleicmat,parDeco,l2excl=NULL,doPlot=1,nSlaves=1){
   
-# ll=names(alleicmat)[grep("R319",names(alleicmat))]
-# idx=ll[[1]]
 llre=list()
 ll=names(alleicmat)#[111:120]
 ll=ll[which(sapply(alleicmat,function(x) max(x$y,na.rm=T))>=parDeco$minHeightMS1)]
@@ -63,10 +60,9 @@ return(ares)
 #'
 #' @param eic eic: list of mz, y, and y2
 #' @param parDeco deconvolution parameter list
-#' @param l2excl refining function
-#' @param doPlot plotting at each step-> for QC check
+#' @param l2excl vector of sample ids to be excluded when refining peak allocations
+#' @param doPlot plotting at each step, vector of 0,1,2
 #' @import matrixStats
-#' @import NMF
 #' @return peak matrix data.frame
 #' @export
 .MGmultiEICintgr<-function(eic,parDeco=list(psdrt=0.00446,span=7,
@@ -249,11 +245,18 @@ invisible(matpks)
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #' 
+#' Internal function for plotting the outcome multiple integration of EICs
 #' 
+#' @param ipks DF of peaks
+#' @param m EIC matrix
+#' @param m0 EIC matrix using the original datapoints
+#' @param parDeco list of deconvolution paramters
+#' @param matpks matrix of integrated peaks
+#' @param fac intensity factor to make intensity easier to read
 #' @keywords internal
 #' 
 #' @export
-.infctintegrplot<-function(m,m0,parDeco,matpks,fac,rmz){
+.infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz){
   
   lso=order(-colSums(m))
   m=m[,lso,drop=F]/fac
@@ -291,8 +294,14 @@ invisible(matpks)
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' Internal function for multiple integration of EICs
 #' 
-#' 
+#' @param ipks DF of peaks
+#' @param m EIC matrix
+#' @param nspan span as in scan
+#' @param l2excl vector of sample ids to be excluded from the refinmet
+#' @param doplot TRUE/FALSE plot the outcome of the refinment process
+#' @import NMF
 #' @keywords internal
 #' 
 #' @export
@@ -334,10 +343,10 @@ invisible(matpks)
 
 #############################################################################
 ##
-#' Fast association of spectra to ROIs from potential precursors
+#' Gather all eics from multiple files
 #' @param lfiles list of files containing the EIC : sholud allxeic
 #' @param eicmat data.frame containing EI?C roi infos
-#' @param outfile both list of aligned eic and euicmat save of not
+#' @param outfile file where alleicmat/eicmat/lfiles could be stored
 #' @return list of aligned eics
 #' @export
 .MGgatherEICfromFiles<-function(lfiles,eicmat,outfile=NULL){
@@ -375,7 +384,7 @@ invisible(matpks)
     alleicmat[[iroi]]=lapply(ieic,function(x){colnames(x)=lsc;x})
     
   }
-  if(!is.null(outfile)) save(file=outfile,alleicmat,eicmat)
+  if(!is.null(outfile)) save(file=outfile,alleicmat,eicmat,lfiles)
   
   invisible(alleicmat)
 }

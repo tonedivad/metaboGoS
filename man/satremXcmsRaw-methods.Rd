@@ -5,13 +5,22 @@
 \alias{satremXcmsRaw}
 \alias{satremXcmsRaw,xcmsRaw-method}
 \alias{satremXcmsRaw}
-\title{get the xcmsRaw lighter}
+\title{Remove artefact in xcmsRaw object
+get the xcmsRaw lighter}
 \format{An object of class \code{NULL} of length 0.}
 \usage{
 \S4method{satremXcmsRaw}{xcmsRaw}(object, reso = 70000, typ = 2,
   inthr = 0, rtlim = c(-Inf, Inf))
 }
-\description{
-get the xcmsRaw lighter
+\arguments{
+\item{object}{xcmsRaw object}
+
+\item{reso}{resolution}
+
+\item{typ}{1/2 2 correrspond to the extended model}
+
+\item{inthr}{intensity threshold}
+
+\item{rtlim}{min/max retention time in min.}
 }
 \keyword{datasets}

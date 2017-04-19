@@ -1,46 +1,46 @@
 
-compSimSpectra<-function(thspec,exspec,mztol=0.1,nMatch=3,lim=0.01,xrankScoremat,verbose=T){
-  
-  .prepspec<-function(aspec,lim=0.01,typ="L"){
-    id=1:nrow(aspec)
-    if(any(c("x","mz")%in%colnames(aspec))) imz=aspec[,which(colnames(aspec)%in%c("x","mz"))[1]] else imz=aspec[,1]
-    if(any(c("y","ynorm","int","intnorm")%in%colnames(aspec))) iint=aspec[,which(colnames(aspec)%in%c("y","ynorm","int","intnorm"))[1]] else iint=aspec[,2]
-    m=cbind(mz=imz,int=iint,id=id,rk=1)
-    m[,2]=round(100*m[,2]/max(m[,2]),ceiling(-log10(0.01))+1)
-    m=m[order(m[,1]),,drop=F]
-    m=m[which(m[,2]>lim),,drop=F]
-    m[,"rk"]=rank(-m[,2],ties="max")
-    colnames(m)=paste0(colnames(m),typ)
-    m
-  }
-  
-  nthspec=lapply(thspec,.prepspec,lim,"L")
-  if(is.null(names(nthspec))) names(nthspec)=paste0("Lib",1:nrow(nthspec))
-  nexspec=lapply(exspec,.prepspec,lim,"U")
-  if(is.null(names(nexspec))) names(nexspec)=paste0("Exp",1:nrow(nexspec))
-  
-  
-  aresMatch=NULL
-  ares=list()
-  for(iexp in names(nexspec)){
-    if(verbose) cat(" ** ",iexp," ",sep="")
-    for(x in names(thspec)){
-      if(verbose) cat(".")
-      re=.GR2compSimCosM(munk = nexspec[[iexp]],mlib = nthspec[[x]],mztol = mztol,nMatch = nMatch,xrankScoremat=xrankScoremat,idunk=iexp,idlib=x)
-      if(is.null(re)) if(verbose) cat(" pb with ",x," ",sep="")
-      if(!is.null(re)) ares=c(ares,list(re))
-    }
-    if(verbose) cat("\n",sep="")
-  }
-  ares=ares[which(sapply(ares,length)==2)]
-  if(length(ares)>0){
-    aresMatch=do.call("rbind",lapply(ares,function(x) x$Stats))
-    rownames(aresMatch)=NULL
-    aresMatch=aresMatch[order(-aresMatch$Cosine),]
-  }
-  return(aresMatch)
-  
-}
+# compSimSpectra<-function(thspec,exspec,mztol=0.1,nMatch=3,lim=0.01,xrankScoremat,verbose=T){
+#   
+#   .prepspec<-function(aspec,lim=0.01,typ="L"){
+#     id=1:nrow(aspec)
+#     if(any(c("x","mz")%in%colnames(aspec))) imz=aspec[,which(colnames(aspec)%in%c("x","mz"))[1]] else imz=aspec[,1]
+#     if(any(c("y","ynorm","int","intnorm")%in%colnames(aspec))) iint=aspec[,which(colnames(aspec)%in%c("y","ynorm","int","intnorm"))[1]] else iint=aspec[,2]
+#     m=cbind(mz=imz,int=iint,id=id,rk=1)
+#     m[,2]=round(100*m[,2]/max(m[,2]),ceiling(-log10(0.01))+1)
+#     m=m[order(m[,1]),,drop=F]
+#     m=m[which(m[,2]>lim),,drop=F]
+#     m[,"rk"]=rank(-m[,2],ties="max")
+#     colnames(m)=paste0(colnames(m),typ)
+#     m
+#   }
+#   
+#   nthspec=lapply(thspec,.prepspec,lim,"L")
+#   if(is.null(names(nthspec))) names(nthspec)=paste0("Lib",1:nrow(nthspec))
+#   nexspec=lapply(exspec,.prepspec,lim,"U")
+#   if(is.null(names(nexspec))) names(nexspec)=paste0("Exp",1:nrow(nexspec))
+#   
+#   
+#   aresMatch=NULL
+#   ares=list()
+#   for(iexp in names(nexspec)){
+#     if(verbose) cat(" ** ",iexp," ",sep="")
+#     for(x in names(thspec)){
+#       if(verbose) cat(".")
+#       re=.GR2compSimCosM(munk = nexspec[[iexp]],mlib = nthspec[[x]],mztol = mztol,nMatch = nMatch,xrankScoremat=xrankScoremat,idunk=iexp,idlib=x)
+#       if(is.null(re)) if(verbose) cat(" pb with ",x," ",sep="")
+#       if(!is.null(re)) ares=c(ares,list(re))
+#     }
+#     if(verbose) cat("\n",sep="")
+#   }
+#   ares=ares[which(sapply(ares,length)==2)]
+#   if(length(ares)>0){
+#     aresMatch=do.call("rbind",lapply(ares,function(x) x$Stats))
+#     rownames(aresMatch)=NULL
+#     aresMatch=aresMatch[order(-aresMatch$Cosine),]
+#   }
+#   return(aresMatch)
+#   
+# }
 
 
 # .GR2matchpairs<-function(munk,mlib,mztol=0.1,nMatch=3){
@@ -73,10 +73,8 @@ compSimSpectra<-function(thspec,exspec,mztol=0.1,nMatch=3,lim=0.01,xrankScoremat
 #' @param mztol tolerance
 #' @param nMatch min number of matches
 #' @param xrankScoremat xrankScoremat
-#' @param xrankScoremat xrankScoremat
 #' @param idunk id of unknown
 #' @param idlib id of library spectra
-#' @import igraph
 #' @return matrix of matches
 #' @export
 compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="unk",idlib="lib"){
@@ -84,12 +82,19 @@ compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="
   ##### Get the best one to one match between spectra
   system.time(resma<-.MGmatchtwosets(munk[,1],mlib[,1],tol = mztol))
   if(is.null(resma))  return(NULL)
+  colnames(resma)=c("row","col","typ")
   
   munk[,2]=100*munk[,2]/max(munk[,2])
+  colnames(munk)[1:2]=c("mzU","intU")
   mlib[,2]=100*mlib[,2]/max(mlib[,2])
+  colnames(mlib)[1:2]=c("mzL","intL")
+  if(!is.null(xrankScoremat)){
+    munk=cbind(munk,"rkU"=rank(-m[,'intU'],ties="max"))
+    mlib=cbind(mlib,"rkL"=rank(-m[,'intL'],ties="max"))
+  }
+  
   
   resma=cbind(resma,munk[resma[,1],],mlib[resma[,2],])
-  colnames(resma)=c("row","col","typ","mzU","intU","mzL","intL")
   resma=cbind(resma,scU=2*log(resma[,'mzU'])+.5*log(resma[,'intU']),
               scL=2*log(resma[,'mzL']+.5*log(resma[,'intL'])))
   ## ties brocken according to MassBank paper
@@ -114,7 +119,6 @@ compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="
     Stats["Cosine"]=round(sum((resma[,"intU"]*resma[,"intL"])/sqrt(sum(resma[,"intU"]^2,na.rm=T)*sum(resma[,"intL"]^2,na.rm=T)),na.rm=T),4)
     Stats["Pearson"]=round(cor.test(resma[,"intU"],resma[,"intL"],method="pearson")$estimate,4)
     if(!is.null(xrankScoremat)){
-      resma=cbind(resma,"rkL"=rank(-m[,'intL'],ties="max"),"rkU"=rank(-m[,'intU'],ties="max"))
       lrkU=which(resma[,"rkU"]<31)
       mU=resma[lrkU,c("rkL","rkU")]
       mU[which(mU[,1]>30 | is.na(mU[,1])),1]=31
@@ -129,7 +133,9 @@ compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="
     
   }
   Stats=data.frame(Unk=idunk,Lib=idlib,t(Stats))
-  return(list(Match=resma,Stats=Stats))
+  res=list(Match=resma,Stats=Stats)
+  class(res)<-c(class(res),'compOneSimCosM')
+  return(res)
 }
 
 ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## 
@@ -190,17 +196,25 @@ compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="
 
 .GR2inbip<-function(e1,e2,we){
   library(igraph)
-  ig=graph_from_edgelist(cbind(e1,e2), directed = FALSE)
+  ig=igraph:::graph_from_edgelist(cbind(e1,e2), directed = FALSE)
   V(ig)$type <- grepl('U',V(ig)$name)
   retmp=max_bipartite_match(ig,weights =we)$matching
   l=which(paste(e1,e2)%in%paste(retmp,names(retmp)))
   return(l)
 }
 
-#####################################
-# plot resmatch
+######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## 
+#' plotting 
+#'
+#' @param resMatch result from compOneSimCosM match 
+#' @param typ 1/2
+#' @import maptools
+#' @return matrix of matches
+#' @export
+
 plotResMatch<-function(resMatch,type=1){
-  require(maptools)
+  
+  if(!class(resMatch)%in%"compOneSimCosM") stop('Not the right class')
   resma=resMatch[[1]]
   yaxt=seq(-100,100,20)
   xaxt=pretty(c(resma[,"mzU"],resma[,"mzL"]))

@@ -50,11 +50,16 @@ setMethod("eicXcmsRaw","xcmsRaw",
 )
 
 ######################################################################################
-
+#' @title Remove artefact in xcmsRaw object
 #' get the xcmsRaw lighter
 #'
 #' @name satremXcmsRaw
 #' @rdname satremXcmsRaw-methods
+#' @param object xcmsRaw object
+#' @param reso resolution
+#' @param typ 1/2 2 correrspond to the extended model
+#' @param inthr intensity threshold
+#' @param rtlim min/max retention time in min.
 #' @import xcms
 #' @export
 setGeneric(name="satremXcmsRaw",def=function(object,reso,typ,inthr,rtlim) standardGeneric("satremXcmsRaw"))
@@ -118,6 +123,7 @@ setMethod("satremXcmsRaw","xcmsRaw",
           
 )
 ######################################################################################
+#' Artfact removal in duples
 #' @param re matrix of mz/int
 #' @param reso mass resolution
 #' @param typ 1/2 extended

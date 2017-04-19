@@ -77,7 +77,6 @@ if(length(comment)) header2exp=c(header2exp,'COM=CFM')
   invisible(list(itmp['Id'],llexp))
 }
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### 
-
 #' @rdname CFM
 #'
 #' @param mf2exp Data frame
