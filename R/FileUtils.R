@@ -54,3 +54,5 @@ readMGFfile<-function(filein,namIdx='DBSpId',startIdx=1,minpk=1){
   
   return(list(DF=dfsp,MS=lsp))
 }
+
+

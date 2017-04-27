@@ -185,6 +185,9 @@
     }
   }
   
+  if(min(tick.loc)<min(which(index.min))) index.min[max(which(rev(diff(y[rev(1:min(tick.loc))]))>0)-1,1)]=TRUE
+  
+  
   # 
   # lmins=unique(c(1,which(index.min & bslscore< -1),length(y)))
   # lmins=lapply(2:length(lmins),function(i) lmins[i-1]:lmins[i])

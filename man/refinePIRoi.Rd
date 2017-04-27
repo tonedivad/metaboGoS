@@ -6,8 +6,9 @@
 
 Refine/integra ROI around spectra  after association of spectra to ROIs from potential precursors}
 \usage{
-refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE,
-  blList = NULL, nSlaves = 1, useMS1file = TRUE, keepOld = TRUE)
+refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, lmzExcl = c(),
+  doPlot = TRUE, blList = NULL, nSlaves = 1, useMS1file = TRUE,
+  keepOld = TRUE)
 }
 \arguments{
 \item{obj}{metaboGoS obj}
@@ -15,6 +16,8 @@ refinePIRoi(obj, parDeco, refFct = metaboGoS:::.MGrefFct0, doPlot = TRUE,
 \item{parDeco}{deconvolution parameter list}
 
 \item{refFct}{refining function}
+
+\item{lmzExcl}{list of m/z excluded form the blank correction}
 
 \item{doPlot}{plotting at each step}
 

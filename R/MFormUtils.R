@@ -115,11 +115,14 @@ getMF.sirius<-function(precmz=NULL,ms1spec=NULL,ms2spec=NULL,ionProd="[M+H]1+",p
 #' @param precppm Accuracy in ppm
 #' @param precmtol Tolerence in mDa
 #' @param ipdb IP database
-#' @param exec Sirius executable
+#' @param exec 7GR executable
+#' @param chkdb database of molform
+#' @import rcdk
 #' @return List of stuff
 #' @export
-getMF.7GR<-function(precmz,lIP="[M+H]1+",precppm=11,precmtol=10,ipdb=NULL,exec='/media/D01/Metabo/MetSoft/HR/myhr'){
+getMF.7GR<-function(precmz,lIP="[M+H]1+",precppm=11,precmtol=10,ipdb=NULL,exec='/media/D01/Metabo/MetSoft/HR/myhr',chkdb=NULL){
   
+  # lIP="[M+H]1+";precppm=11;precmtol=10;ipdb=IPDB;exec='/media/D01/Metabo/MetSoft/HR/myhr';chkdb="MolFormDF"
   .inHR<-function(imz,mtolprec,exec='myhr'){
     
     args=c(paste0("-m ",imz),paste0("-t ",mtolprec))
@@ -141,8 +144,8 @@ getMF.7GR<-function(precmz,lIP="[M+H]1+",precppm=11,precmtol=10,ipdb=NULL,exec='
   }
   
   
-  ladd = unique(which(ipdb$Id %in% lIP | ipdb$Name %in% lIP | 
-                        ipdb$Set %in% lIP))
+  ladd = unique(which(ipdb$Id %in% lIP | ipdb$Name %in% lIP | ipdb$Set %in% lIP))
+  
   if (length(ladd) == 0) 
     stop(paste("IPs invalid - must be in :\n", "  *positive mode: ", 
                paste(IPDB$Name[IPDB$Charge > 0], collapse = " "), 
@@ -151,16 +154,25 @@ getMF.7GR<-function(precmz,lIP="[M+H]1+",precppm=11,precmtol=10,ipdb=NULL,exec='
   
   
   m2match=do.call("rbind",lapply(ladd, function(i) cbind(i,precmz,(abs(ipdb[i, ]$Charge) * precmz - ipdb[i, ]$adMass)/ipdb[i, ]$xM)))
-  if(!is.null(precppm)) precmtol=m2match[,3]*precppm*10^-3
-  m2match=cbind(m2match,precmtol)
+  if(!is.null(precppm)) m2match=cbind(m2match,precmtol=m2match[,3]*precppm*10^-3) else m2match=cbind(m2match,precmtol=precppm)
   
   allre=list()
   for(i in 1:nrow(m2match)){
     re=.inHR(imz = m2match[i,3],mtolprec = m2match[i,4],exec = exec)
-    if(!is.null(re)) allre[[i]]=data.frame(cbind(Adduct=ipdb[m2match[i,1],]$Name,MZ=m2match[i,2],re),check.names = F)
+    if(is.null(re)) next
+    re$Adduct=ipdb[m2match[i,1],]$Name
+    re$precMZ=m2match[i,2]
+    allre[[i]]=re[,c(  "Adduct", "precMZ","MF","Mass","RDB","mTol","Dppm")]
   }
   res=do.call("rbind",allre)
   rownames(res)=NULL
+  if(!is.null(chkdb)){
+    eval(parse(text=paste0("data(",chkdb,")")))
+  res$InDB=res$MF%in%MolFormDF$MF
+  if(any(res$Adduct=="[M]1+")) res$InDB[res$Adduct=="[M]1+"]=res$MF[res$Adduct=="[M]1+"]%in%MolFormDF$MF[MolFormDF$Charge==1]
+  if(any(res$Adduct=="[M]1-")) res$InDB[res$Adduct=="[M]1-"]=res$MF[res$Adduct=="[M]1-"]%in%MolFormDF$MF[MolFormDF$Charge== -1]
+  res=res[order(!res$InDB),,drop=F]
+  }
   return(res)
 }
 

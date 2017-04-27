@@ -214,7 +214,7 @@ compOneSimCosM<-function(munk,mlib,mztol=0.1,nMatch=3,xrankScoremat=NULL,idunk="
 
 plotResMatch<-function(resMatch,type=1){
   
-  if(!class(resMatch)%in%"compOneSimCosM") stop('Not the right class')
+  if(!"compOneSimCosM"%in%class(resMatch)) stop('Not the right class')
   resma=resMatch[[1]]
   yaxt=seq(-100,100,20)
   xaxt=pretty(c(resma[,"mzU"],resma[,"mzL"]))

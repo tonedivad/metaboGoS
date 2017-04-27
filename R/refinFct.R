@@ -11,7 +11,7 @@
 #' @keywords internal
 #' 
 #' @export
-.MGrefFct0<-function(eic,eicbl=NULL,parDeco,imain=NULL,doPlot=T){
+.MGrefFct0<-function(eic,eicbl=NULL,parDeco,imain=NULL,doPlot=T,lExcl=NULL){
   
   reroi=.MGrefineROIs(eic[which(!is.na(eic[,"y"])),],parDeco,minRTwin = parDeco$minRTwin,drt=parDeco$psdrt)
   if(is.null(reroi)) return(NULL)
@@ -34,6 +34,7 @@
     if(length(l2excl)) xeic[l2excl,c("mz","y")]=NA
     xeic=xeic[order(xeic[,"scan"],!is.na(xeic[,"mz"])),]
     xeic=xeic[which(!(duplicated(xeic[,"scan"]) & is.na(xeic[,"mz"]))),]
+    irmz=range(xeic[,"mz"],na.rm = T)
     
     ##### dual smooth/peak detec
     # drt = parDeco$psdrt ; span=parDeco$span;bw=parDeco$bw;minNoise=parDeco$minNoiseMS1;minHeight=parDeco$minHeightMS1;sbslr=2
@@ -49,7 +50,7 @@
     # newx=data.frame(cbind(newx,bsl=bsl$fit[n2pad+(1:nrow(newx))],bslc=bslscore[n2pad+(1:nrow(newx))]))
     # noise.local=(newx$y2/newx$bsl >=2 & newx$bslc>=1)*1;noise.local[newx$bslc< -1]=-1
     # 
-    # bsl=newx$bsl;bslscore=newx$bslc;x=newx[,"rt"];y=newx[,"y2"];span=nspan;minNoise = minNoise*1.01;v2alim = 0.8
+    # bsl=newx$bsl;bslscore=newx$bslc;x=newx[,"rt"];y=newx[,"y2"];span=nspan;minNoise = minNoise*1.01;v2alim = 0.8;snr.thresh = parDeco$sbslr
     
     #### quick integration
     pks=.MGsimpleIntegr2(x=newx[,"rt"],y=newx[,"y2"],bsl = newx$bsl,bslscore = newx$bslc,snr.thresh = parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
@@ -79,7 +80,8 @@
     pks$pk.sbr=round(sapply(pks$pk.loc,function(i) max((newx$y2/newx$ybl)[which(abs(newx$rt-i)<=(2*parDeco$psdrt))])),3)
     pks$pk.snr=round(sapply(pks$pk.loc,function(i) max((newx$y2/newx$bsl)[which.min(abs(newx$rt-i))])),3)
     
-    l2k=as.numeric(names(which(tapply(pks$pk.sbr,pks$pk.cl,max)>=parDeco$sbr &
+    sbrlim=ifelse(any(lExcl>=irmz[1] & lExcl<=irmz[2]),0,parDeco$sbr)
+    l2k=as.numeric(names(which(tapply(pks$pk.sbr,pks$pk.cl,max)>=sbrlim &
                                  tapply(pks$pk.snr,pks$pk.cl,max)>=parDeco$sbslr &
                                  tapply(pks$pk.int*2,pks$pk.cl,max)>parDeco$minHeightMS1)))
     pks=pks[pks$pk.cl%in%l2k,,drop=F]
@@ -151,18 +153,44 @@
     if(doPlot){
       #  pks=ire[[1]]
       # newx=ire[[2]]
+      yl=pretty(range(sqrt(c(0,xeic[,"y"],newx$y)),na.rm=T))
+     # yl=pretty(sqrt(range(pretty(yl^2))))
+      xl=pretty(rtr0,n=11)
+      par(mfrow=c(2,1))
+      par(mar=c(1,5,2,0))
+      plot(xeic[,"rt"],sqrt(xeic[,"y"]),pch=16,main=paste(imain,iiroi,round(.GRcoda(newx$y2),2)),xlab="",ylab="Height*10^6",
+           xlim=range(xl),ylim=range(yl),axes=F)
+      axis(2,at=yl,yl^2/1000000,las=2,pos=min(xl))
+    #  axis(1,at=xl,pos=min(yl))
+#      abline(v=c(unique(matpks$pk.rtmax),unique(matpks$pk.rtmin)),col="grey",lwd=2)
+      lines(newx$rt,sqrt(newx$y2),col=2)
+      lines(newx$rt,sqrt(newx$bsl),col=4,lwd=2,lty=1)
+      lines(newx$rt,sqrt(newx$bsl*parDeco$sbslr),col=4,lwd=1,lty=4)
+      lines(newx$rt,sqrt(newx$ybl*parDeco$sbr),col=3,lwd=1,lty=2)
+      lines(newx$rt,sqrt(newx$ybl),col=3,lwd=2,lty=1)
+      abline(h=sqrt(parDeco$minHeightMS1))
+      points(matpks$pk.rtap,sqrt(matpks$pk.int.ap),pch=8,col=factor(matpks$cl.id),cex=2)
+      abline(v=matpks$pk.rtmin+parDeco$psdrt/2,lty=3)
+      abline(v=matpks$pk.rtmax-parDeco$psdrt/2,lty=4)
       
-      plot(xeic[,"rt"],xeic[,"y"],pch=16,main=paste(imain,iiroi,round(.GRcoda(newx$y2),2)),xlab="Retention time",ylab="Height",
-           xlim=range(pretty(rtr0)),ylim=range(c(0,xeic[,"y"],newx$y),na.rm=T),yaxt="n")
-      axis(2,las=2)
-      abline(v=c(unique(matpks$pk.rtmax),unique(matpks$pk.rtmin)),col="grey",lwd=2)
-      lines(newx$rt,newx$y2,col=2)
-      lines(newx$rt,newx$bsl,col=4,lwd=2,lty=4)
-      lines(newx$rt,newx$ybl,col=3,lwd=2,lty=2)
-      abline(h=parDeco$minHeightMS1)
-      points(matpks$pk.rtap,matpks$pk.int.ap,pch=8,col=factor(matpks$cl.id),cex=2)
-      abline(v=matpks$pk.min+parDeco$psdrt/2,lty=3)
-      abline(v=matpks$pk.max-parDeco$psdrt/2,lty=4)
+      
+      ################
+      par(mar=c(4,5,0,0))
+      yl=pretty(range(c(range(matpks$pk.mzmed,matpks$pk.mz)*(1+c(-1,1)*2.1*10^-6),quantile(xeic[,"mz"],c(.1,.9),na.rm=T))))
+      xl=pretty(rtr0,n=11)
+      plot(xeic[,"rt"],xeic[,"mz"],pch=16,main=NULL,xlab="Retention time",ylab="",xlim=range(xl),ylim=range(yl),axes=F)
+      axis(2,at=yl,las=2,pos=min(xl))
+      nv=ceiling(diff(range(yl))/(median(yl)*10^-6))
+      abline(h=(-nv:nv)*median(yl)*10^-6+median(yl),lty=3,col="grey")
+      axis(1,at=xl,pos=min(yl))
+#      abline(v=c(unique(matpks$pk.rtmax),unique(matpks$pk.rtmin)),col="grey",lwd=2)
+      points(matpks$pk.rtap,matpks$pk.mz,pch=19,col=factor(matpks$cl.id),cex=2)
+      abline(v=matpks$pk.rtmin+parDeco$psdrt/2,lty=3)
+      abline(v=matpks$pk.rtmax-parDeco$psdrt/2,lty=4)
+      par(mfrow=c(1,1),mar=c(5.1 ,4.1 ,4.1, 2.1))
+      
+      
+      
     }
     
     #   reroi2=c(reroi2,list(pks))

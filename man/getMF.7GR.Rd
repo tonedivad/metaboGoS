@@ -5,7 +5,7 @@
 \title{Interface to the 7GR executable}
 \usage{
 getMF.7GR(precmz, lIP = "[M+H]1+", precppm = 11, precmtol = 10,
-  ipdb = NULL, exec = "/media/D01/Metabo/MetSoft/HR/myhr")
+  ipdb = NULL, exec = "/media/D01/Metabo/MetSoft/HR/myhr", chkdb = NULL)
 }
 \arguments{
 \item{precmz}{Precursor m/z}
@@ -18,7 +18,9 @@ getMF.7GR(precmz, lIP = "[M+H]1+", precppm = 11, precmtol = 10,
 
 \item{ipdb}{IP database}
 
-\item{exec}{Sirius executable}
+\item{exec}{7GR executable}
+
+\item{chkdb}{database of molform}
 }
 \value{
 List of stuff

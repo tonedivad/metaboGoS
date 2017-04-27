@@ -3,7 +3,7 @@
 #' @title Convert CFM file to MGF
 #' some stufff
 #'
-#' @param filein Path to the input file
+#' @param filein Path to the input file or xcmsRaw object
 #' @param lmzcalib Calibration masses
 #' @param dppm Mass error
 #' @param bw Bandwidth to group masses
@@ -12,13 +12,19 @@
 #' @param calInt calibration interval to compute 
 #' @param doPlot should plot
 #' @import segmented
-#' @return xcms
+#' @return list of matches and calibration function/paramters
 #' @export
 calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T,retMat=F){
   
   # dppm=20;bw=2.5;minpts=31;bkpoint=200;calInt=c(80,350)
-  cat("Opening ",filein,"\n")
-  xRaw=xcmsRaw(filein,includeMSn = FALSE)
+  if("xcmsRaw"%in%class(filein)){
+    xRaw=filein
+    cat("xRaw file from ",unclass(xRaw@filepath),"\n",sep="")
+  }
+  if("character"%in%class(filein)){
+    cat("Opening ",filein,"\n")
+    xRaw=xcmsRaw(filein,includeMSn = FALSE)
+  }
   allcal=list()
   for(ical in 1:length(lmzcalib)){
     imz=.GRrawMat(xRaw,mzrange=lmzcalib[ical]*(1+c(-1,1)*dppm*10^-6))
@@ -109,10 +115,11 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calIn
   }
   }
 
-  
-  
+  matdf$pred=calfct(matdf$calmz,calpars)
+  matdf$res=matdf$dppm-matdf$pred
   
   if(doPlot){
+    par(mfrow=c(1,2),mar=c(5,4.5,1,.2))
     xl=pretty(range(c(matdf$calmz,calInt)))
     pred=calfct(min(xl):max(xl),calpars)
     yl=pretty(range(c(matdf$dppm,0,pred),na.rm=T))
@@ -120,9 +127,18 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calIn
     abline(h=-1:1,lty=c(2,1,2))
     abline(v=calpars["brk"],col="grey",lwd=2)
     abline(v=calpars[names(calpars)%in%c("low","high")],col="grey",lwd=1,lty=2)
-    
     axis(2,at=yl,las=2,pos=min(xl));axis(1,at=xl,pos=min(yl))
     lines(min(xl):max(xl),pred,col=2,lwd=2)
+    
+    pred=predict(gam(res~s(calmz),data=matdf,subset=out),newdata = data.frame(calmz=min(xl):max(xl)))
+    yl=pretty(range(c(matdf$res[matdf$out],-1:1,pred),na.rm=T))
+    plot(matdf$calmz,matdf$res,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="Residuals")
+    lines(min(xl):max(xl),pred,col=4,lwd=2)
+    abline(h=-1:1,lty=c(2,1,2))
+    abline(v=calpars["brk"],col="grey",lwd=2)
+    abline(v=calpars[names(calpars)%in%c("low","high")],col="grey",lwd=1,lty=2)
+    axis(2,at=yl,las=2,pos=min(xl));axis(1,at=xl,pos=min(yl))
+    par(mfrow=c(1,1))
   }
   list(mat=matdf,calfct=calfct,calpars=calpars)
   # mod=scam(dppm~s(calmz,bs="mpi",m=2),family=gaussian(link="identity"),data=matdf[matdf$out,],not.exp=FALSE)
@@ -154,6 +170,11 @@ setMethod(".MGcorrRawPPM","xcmsRaw",
           .MGcorrRawPPM<-function(object,calfct,calpars){
             ## based on calibration function/parameeters
 
+           if("character"%in%class(object)){
+              cat("Opening ",object,"\n")
+              object=xcmsRaw(object,includeMSn = FALSE)
+            }
+            
             scsten=cbind(object@scanindex+1,c(object@scanindex[-1],length(object@env$intensity)))
             rownames(scsten)=1:length(object@scanindex)
 

@@ -130,7 +130,7 @@ invisible(allxeic)
   
   y=newx$y2
   n2pad=131
-  y=c(rep(y[1],n2pad),y,rep(rev(y)[1],n2pad))
+  y=c(rep(minNoise,n2pad-span*3-1),rep(y[1],span*3+1),y,rep(rev(y)[1],span*3+1),rep(minNoise,n2pad-span*3-1))
   bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
   bsl$fit[bsl$fit<minNoise]=minNoise
   bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
