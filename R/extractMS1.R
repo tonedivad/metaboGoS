@@ -39,7 +39,15 @@ refinePIRoi<-function(obj,
   # }
   # 
   
-  cefi=normalizePath(paste0(obj$File$dirName,"/",ifelse(!is.null(obj$File$MS1file) & useMS1file,obj$File$MS1file,obj$File$fileName)))
+  cefi=normalizePath(paste0(obj$File$dirName,"/",obj$File$fileName))
+  ## check MS1
+  if(useMS1file & !is.null(obj$File$MS1file)){
+    ncefi<-suppressWarnings(normalizePath(paste0(obj$File$dirName,"/",obj$File$MS1file)))
+    if(!file.exists(ncefi) & file.exists(obj$File$MS1file)) ncefi<-suppressWarnings(normalizePath(obj$File$MS1file))
+    if(file.exists(ncefi)) cefi=ncefi
+  }
+  
+  
   xr=xcmsRaw(cefi,includeMSn = FALSE)
   sc2rt=round(xr@scantime/60,5)
   
@@ -269,7 +277,14 @@ extractPIRoi<-function(obj,
   strt=as.integer(as.POSIXct( Sys.time() ))
 
   ms2inf=obj$MS2Infos
-  cefi=normalizePath(paste0(obj$File$dirName,"/",ifelse(!is.null(obj$File$MS1file) & useMS1file,obj$File$MS1file,obj$File$fileName)))
+  cefi=normalizePath(paste0(obj$File$dirName,"/",obj$File$fileName))
+  ## check MS1
+  if(useMS1file & !is.null(obj$File$MS1file)){
+    ncefi<-suppressWarnings(normalizePath(paste0(obj$File$dirName,"/",obj$File$MS1file)))
+    if(!file.exists(ncefi) & file.exists(obj$File$MS1file)) ncefi<-suppressWarnings(normalizePath(obj$File$MS1file))
+    if(file.exists(ncefi)) cefi=ncefi
+  }
+         
   xr=xcmsRaw(cefi,includeMSn = FALSE)
   cat("Extract potential PIs from '",unclass(xr@filepath),"' comprising ",nrow(ms2inf)," MS/MS and ",length(xr@scantime)," MS1\n",sep="")
   

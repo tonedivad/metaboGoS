@@ -9,10 +9,11 @@
 #' @param intlim Limit on the intensity normalised to the most intense peak
 #' @param intlim2 Limit on the intensity as raw
 #' @param nmax number of rows in the sparse matrix, i.e. max(mz)/bin
+#' @param reduce should all zeros row removed
 #' @import Matrix
 #' 
 #' @export
-combMSMS<-function(speclist,bin=0.01,binwin=0.1,reso=17500,intlim=10^-5,intlim2=200,nmax=NA,mzlim=c(-Inf,Inf)){
+combMSMS<-function(speclist,bin=0.01,binwin=0.1,reso=17500,intlim=10^-5,intlim2=200,nmax=NA,mzlim=c(-Inf,Inf),reduce=F){
   
   # bin=0.01;binwin=0.1;reso=17500;intlim=10^-5;intlim2=200;nmax=NA;mzlim=c(50,2000)
   
@@ -44,7 +45,8 @@ combMSMS<-function(speclist,bin=0.01,binwin=0.1,reso=17500,intlim=10^-5,intlim2=
   colnames(msp)=names(avect)
   spform=paste0("%.",ceiling(abs(log10(bin)))+1,"f")
   rownames(msp)=sprintf(spform,(1:nmax)*bin)
-  msp=msp[which(rowSums(msp>0)>0)[1]:rev(which(rowSums(msp>0)>0))[1],,drop=F]
+  msp=msp[which(Matrix:::rowSums(msp)>0)[1]:rev(which(Matrix:::rowSums(msp)>0))[1],,drop=F]
+  if(reduce) msp=msp[which(Matrix:::rowSums(msp)>0),,drop=F]
   invisible(msp)
 }
 
@@ -57,10 +59,11 @@ combMSMS<-function(speclist,bin=0.01,binwin=0.1,reso=17500,intlim=10^-5,intlim2=
 #' @param weight  Weight for NDP c(m=0.5,n=1.5)
 #' @param plim set anything below plim to zero
 #' @param useSqrt should sqrt tranform the intensities
+#' @param retPerc return perc overlap
 #' @import Matrix
 #' 
 #' @export
-compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE){
+compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE,retPerc=TRUE){
   
   # weight=c(m=NA,n=NA);plim=10^-5;coslim=0;useSqrt=TRUE
   
@@ -83,7 +86,7 @@ compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE){
       m2=m2[rownames(m1),,drop=FALSE]
       
     }
-  } else m2=m1=m1[which(rowSums(m1!=0)>0),,drop=FALSE]
+  } else m2=m1=m1[which(Matrix:::rowSums(m1!=0)>0),,drop=FALSE]
   
   ## normalise
   m1=sweep(m1,2,apply(m1,2,max),"/")
@@ -96,7 +99,7 @@ compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE){
   m2=sqrt(m2)
 }
   ##
-  percexp=sweep(crossprod(m1,m2>0),1,colSums(m1),"/")*100
+  if(retPerc) percexp=sweep(Matrix:::crossprod(m1,m2>0),1,Matrix:::colSums(m1),"/")*100
   ## Comp NDP
   if(!all(is.na(weight))){
     mz=as.numeric(rownames(m1))^weight["m"]
@@ -107,7 +110,8 @@ compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE){
   ## Comp similarity
   cosine=crossprod(m1,m2)/sqrt(colSums(m1^2))%*%t(sqrt(colSums(m2^2)))
 
-  invisible(list(cosine=cosine,percexp=percexp))
+  if(retPerc) return(list(cosine=cosine,percexp=percexp)) else return(cosine)
+  
   
   
 }
@@ -135,3 +139,47 @@ compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE){
   ) )
 }
 
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' 
+#' Merge list of ms/ms spectra
+#' 
+#' @param split list of spectra
+#' @param dmz delta m/z for merging
+#' @param fct  merging function
+#' @param minNoise supress anything below minNoise
+#' 
+#' @export
+mergeMSMS<-function(splist,dmz=0.005,fct=median,minNoise=0,reso=17500){
+  
+  whichmz="mz"
+  whichint="y"
+  whichid="sc"
+  xtmp=do.call("rbind",splist)[,c(whichid,whichmz,whichint)]
+  if(nrow(xtmp)<2) return(xtmp)
+  xtmp=xtmp[order(xtmp[,whichmz],xtmp[,whichint]),,drop=F]
+  llsplit=lapply(.GRsplistMZ(xtmp[,"mz"],dmz=dmz*4.1),function(x) xtmp[x,,drop=F])
+  
+  for(i in which(sapply(llsplit,nrow)>1)){
+  itmp=llsplit[[i]]
+  if(length(unique(itmp[,1]))==1) next
+  ll=tapply(1:nrow(itmp),itmp[,whichid],function(y) itmp[y,c(whichmz,whichint),drop=F])
+  cspec=combMSMS(ll,bin = dmz/10,reso = reso,reduce = F,mzlim = range(itmp[,whichmz])+c(-2,2)*dmz,intlim = 0,intlim2 = 0)
+  cspec=cbind(as.numeric(rownames(cspec)),rowSums(cspec))
+  nsp=2
+  lpks=.GRfindturnpoint(cspec[,2])$pks
+  if(length(lpks)==0){nsp=1;lpks=which(.GRipeaks(-diff(diff(cspec[,2])),span = 2*nsp+1))+1}
+  lpks=outer(lpks,-nsp:nsp,"+")           
+  lpks[which(lpks<1 | lpks>nrow(cspec))]=NA
+  newsp=t(apply(lpks,1,function(x) c(mz=weighted.mean(cspec[x,1],cspec[x,2],na.rm = T),y=max(cspec[x,2],na.rm = T))))
+  newsp[,2]=newsp[,2]*sum(itmp[,whichint])/sum(newsp[,2])
+  llsplit[[i]]=cbind(0,newsp)
+}
+  finalcs=do.call("rbind",llsplit)
+  colnames(finalcs)=c(whichid,whichmz,whichint)
+  finalcs[,3]= finalcs[,3]*sum(xtmp[,whichint])/sum( finalcs[,3])
+  finalcs[order(finalcs[,2]),,drop=F]
+}
+  
+  
