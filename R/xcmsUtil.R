@@ -89,7 +89,7 @@ setMethod("satremXcmsRaw","xcmsRaw",
               newdat[[ix]]=cbind(re,scan=ix)
             }
             ntot=diff(range(scsten[as.character(lsc),]))+1
-            cat(" -- removed",nrm1,"/",nrm2,"out of",ntot,"duples - avg.=",round(100*nrm1/ntot,2),"/",round(100*nrm2/ntot,2),"perc. per scan")
+            cat(" -- removed ",nrm1,"/",nrm2," out of",ntot," duples - avg.=",round(100*nrm1/ntot,2),"/",round(100*nrm2/ntot,2)," perc. per scan\n",sep="")
             newdat=do.call("rbind",newdat)
             newdat=newdat[order(newdat[,"scan"],newdat[,1]),,drop=F]
            scrange=min(newdat[,"scan"]):max(newdat[,"scan"])

@@ -16,8 +16,11 @@
   
 llre=list()
 ll=names(alleicmat)#[111:120]
-ll=ll[which(sapply(alleicmat,function(x) max(x$y,na.rm=T))>=parDeco$minHeightMS1)]
-lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+lperc=""
+
+
+ll=ll[which(sapply(alleicmat[ll],function(x) max(x$y,na.rm=T))>=parDeco$minHeightMS1)]
+if(length(ll)>20) lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
 
 if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
 if(nSlaves>1){
@@ -81,23 +84,29 @@ return(ares)
   
   
 bsllist=list(bsl=m,bslsc=m)
-
 for(isid in colnames(m)){
   y=m[,isid]
-  y=c(rep(y[1],nspan*5+1),y,rep(rev(y)[1],nspan*5+1))
+  n2pad=131
+  y=c(rep(minNoise,n2pad-span*3-1),rep(y[1],span*3+1),y,rep(rev(y)[1],span*3+1),rep(minNoise,n2pad-span*3-1))
   bsl=GRMeta:::.GRbslrf(1:length(y),y,NoXP = NULL)
   bsl$fit[bsl$fit<minNoise]=minNoise
   bslscore <- (y - bsl$fit)/max(bsl$sigma, 10^-3)
   bslscore[which(abs(bslscore) > 10)] = sign(bslscore[which(abs(bslscore) > 10)]) * 10
-  bsllist$bsl[,isid]=bsl$fit[nspan*5+1+(1:nrow(m))]
-  bsllist$bslsc[,isid]=bslscore[nspan*5+1+(1:nrow(m))]
+  
+  bsllist$bsl[,isid] = bsl$fit[n2pad+(1:nrow(m))]
+  bsllist$bslsc[,isid] = bslscore[n2pad+(1:nrow(m))]
+  
 }
 
 
 ######################## get the master peak list ######################## 
+##     pks=.MGsimpleIntegr2(x=newx[,"rt"],y=newx[,"y2"],bsl = newx$bsl,bslscore = newx$bslc,snr.thresh = parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+
 apks=list()
 for(isid in colnames(m)){
-  re=.MGsimpleIntegr(x=1:nrow(m),y=m[,isid],noise.local =bsllist$bsl[,isid],snr.thresh = 2,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+  # x=1:nrow(m);y=m[,isid];bsl = bsllist$bsl[,isid];bslscore = bsllist$bslsc[,isid];snr.thresh =parDeco$sbsl;  span=nspan;minNoise = minNoise*1.01;v2alim = 0.8
+  
+  re=.MGsimpleIntegr2(x=1:nrow(m),y=m[,isid],bsl = bsllist$bsl[,isid],bslscore = bsllist$bslsc[,isid],snr.thresh =parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
   if(nrow(re)==0) next
   re$Sid=isid
   apks[[isid]]=re
@@ -206,6 +215,9 @@ for(isid in lmiss){
     l=which(matpks$Pk>ipk & matpks$Sid==isid);if(length(l)) iv[lx>min(matpks$rt[l])]=TRUE
     l=which(matpks$Pk<ipk & matpks$Sid==isid);if(length(l)) iv[lx<max(matpks$rt[l])]=TRUE
     if(all(v[!iv]<(minNoise*2))) next
+    
+    # x=lx;y=v;noise.local = rep(minNoise,length(lx)) ;snr.thresh = 1.01;span=ceiling(nspan/2);minNoise = minNoise*1.01;v2alim = 0.8
+    
     re=.MGsimpleIntegr(x=lx,y=v,noise.local = rep(minNoise,length(lx)) ,snr.thresh = 1.01,span=ceiling(nspan/2),minNoise = minNoise*1.01,v2alim = 0.8)
     if(nrow(re)==0) next
     ##  make sure the new peak is in no peak area
@@ -259,31 +271,38 @@ invisible(matpks)
 .infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz){
   
   lso=order(-colSums(m))
-  m=m[,lso,drop=F]/fac
-  m0=m0[,lso,drop=F]/fac
+  m=sqrt(m[,lso,drop=F]/fac)
+  m0=sqrt(m0[,lso,drop=F]/fac)
   lrt=as.numeric(rownames(m))*parDeco$psdrt
   sids=colnames(m)
+  sidsl=rep(c(letters,LETTERS),ceiling(length(sids)/52))[1:length(sids)]
+  names(sidsl)=sids
+  
   xl=pretty(lrt)
-  ylim=pretty(c(0,max(m,na.rm=T),max(m0,na.rm=T),matpks$int.sm/fac))
+  ylim=pretty(c(0,max(m,na.rm=T),max(m0,na.rm=T),sqrt(matpks$int.sm/fac)))
   cols=rep(brewer.pal(8,"Dark2"),ceiling(ncol(m)/8))[1:ncol(m)]
   names(cols)=colnames(m)
   
   #par(mfrow=c(2,1),mar=c(5,4,1,.1))
-  par(mfrow=c(2,1),mar=c(5,4,1,.1))
+  par(mfrow=c(2,1),mar=c(1,4,1,.1))
   matplot(lrt,m,typ="l",ylim=range(ylim),xlim=range(xl),#main=iroi,
-          col=cols,axes=F,xlab="rt",ylab="Int")
+          col=cols,axes=F,xlab="rt",ylab="Sqrt(Int)")
   # matplot(lrt,m0,typ="p",ylim=ylim,col=metaData[sids,]$Cols,pch=16,add=T)
-  axis(2,las=2,pos=xl[1]);axis(1,at=xl,pos=0)
+  axis(2,at=ylim,ylim^2,las=2,pos=min(xl))
+ # axis(1,at=xl,pos=min(ylim))
   abline(v=xl,lty=2,col="grey")
   legs=paste0(sids," (",colSums(!is.na(m0)),")")
-  legend("topright",legs,col=cols,cex=.5,bty="n",ncol=1,pch=16,pt.cex=1)
+  legend("topright",legs,col=cols,cex=.5,bty="n",ncol=1,pch=sidsl,pt.cex=0.5)
   cols=rep(brewer.pal(8,"Dark2"),ceiling(max(matpks$Pk)/8))
-  points(matpks$rt,matpks$int.sm/fac,col=cols[matpks$Pk],pch=16)
+  text(matpks$rt,sqrt(matpks$int.sm/fac),sidsl[matpks$Sid],col=cols[matpks$Pk])
   abline(v=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=2,lwd=2)
   abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
   
   ylim=pretty(rmz)
-  plot(matpks$rt,matpks$mz,ylim=range(ylim),xlim=range(xl),axes=F,xlab="rt",ylab="",col=cols[matpks$Pk],pch=16) #,main=iroi
+  par(mar=c(5,4,0,.1))
+  plot(range(matpks$rt),range(matpks$mz),ylim=range(ylim),xlim=range(xl),axes=F,xlab="rt",ylab="",col=cols[matpks$Pk],pch=16,cex=0) #,main=iroi
+  text(matpks$rt,matpks$mz,sidsl[matpks$Sid],col=cols[matpks$Pk])
+  
   abline(v=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=2,lwd=2)
   abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
   abline(h=ylim,lty=2,col="grey")
@@ -351,12 +370,14 @@ invisible(matpks)
 #' @export
 .MGgatherEICfromFiles<-function(lfiles,eicmat,outfile=NULL){
   
+  lfiles=lfiles[file.exists(lfiles)]
+  if(length(lfiles)==0) stop('No files found')
   if(is.null(names(lfiles))) names(lfiles)=paste0("S",1:length(lfiles))
   cat(" ++ found ",length(lfiles)," sample files\n",sep="")
   alleic=list()
-  for(isid in names(lfile)){
+  for(isid in names(lfiles)){
     cat(isid,"- ")
-    load(lfileout[isid])
+    load(lfiles[isid])
     allxeic=allxeic[names(allxeic)%in%eicmat$RoiId]
     alleic[[isid]]=allxeic
   }
@@ -384,7 +405,10 @@ invisible(matpks)
     alleicmat[[iroi]]=lapply(ieic,function(x){colnames(x)=lsc;x})
     
   }
-  if(!is.null(outfile)) save(file=outfile,alleicmat,eicmat,lfiles)
+  if(!is.null(outfile)){
+    cat(" ++ saving to ",outfile,"\n",sep="")
+    save(file=outfile,alleicmat,eicmat,lfiles)
+  }
   
   invisible(alleicmat)
 }

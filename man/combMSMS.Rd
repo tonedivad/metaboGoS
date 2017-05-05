@@ -5,7 +5,8 @@
 \title{Return MS/MS sparse matrix from a list spectra}
 \usage{
 combMSMS(speclist, bin = 0.01, binwin = 0.1, reso = 17500,
-  intlim = 10^-5, intlim2 = 200, nmax = NA, mzlim = c(-Inf, Inf))
+  intlim = 10^-5, intlim2 = 200, nmax = NA, mzlim = c(-Inf, Inf),
+  reduce = F)
 }
 \arguments{
 \item{speclist}{List of spectra matrices}
@@ -21,6 +22,8 @@ combMSMS(speclist, bin = 0.01, binwin = 0.1, reso = 17500,
 \item{intlim2}{Limit on the intensity as raw}
 
 \item{nmax}{number of rows in the sparse matrix, i.e. max(mz)/bin}
+
+\item{reduce}{should all zeros row removed}
 }
 \description{
 Return MS/MS sparse matrix from a list spectra

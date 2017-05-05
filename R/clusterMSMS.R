@@ -37,7 +37,7 @@ combMSMS<-function(speclist,bin=0.01,binwin=0.1,reso=17500,intlim=10^-5,intlim2=
     if(nrow(sp2)==0) next
     avect[[im]]=sp2
   }
-
+  
   if(is.na(nmax)) nmax=ceiling(max(sapply(avect,function(x) range(x[,"mz"]))))
   
   
@@ -93,23 +93,23 @@ compSimSPmat<-function(m1,m2=NULL,weight=c(m=NA,n=NA),plim=10^-5,useSqrt=TRUE,re
   m1[which(m1<plim)]=0
   m2=sweep(m2,2,apply(m2,2,max),"/")
   m2[which(m2<plim)]=0
- 
+  
   if(useSqrt){ 
-  m1=sqrt(m1)
-  m2=sqrt(m2)
-}
+    m1=sqrt(m1)
+    m2=sqrt(m2)
+  }
   ##
   if(retPerc) percexp=sweep(Matrix:::crossprod(m1,m2>0),1,Matrix:::colSums(m1),"/")*100
   ## Comp NDP
   if(!all(is.na(weight))){
     mz=as.numeric(rownames(m1))^weight["m"]
-  m1=sweep(m1^weight["n"],1,mz,"*")
-  m2=sweep(m2^weight["n"],1,mz,"*")
+    m1=sweep(m1^weight["n"],1,mz,"*")
+    m2=sweep(m2^weight["n"],1,mz,"*")
   }
   
   ## Comp similarity
   cosine=crossprod(m1,m2)/sqrt(colSums(m1^2))%*%t(sqrt(colSums(m2^2)))
-
+  
   if(retPerc) return(list(cosine=cosine,percexp=percexp)) else return(cosine)
   
   
@@ -162,24 +162,54 @@ mergeMSMS<-function(splist,dmz=0.005,fct=median,minNoise=0,reso=17500){
   llsplit=lapply(.GRsplistMZ(xtmp[,"mz"],dmz=dmz*4.1),function(x) xtmp[x,,drop=F])
   
   for(i in which(sapply(llsplit,nrow)>1)){
-  itmp=llsplit[[i]]
-  if(length(unique(itmp[,1]))==1) next
-  ll=tapply(1:nrow(itmp),itmp[,whichid],function(y) itmp[y,c(whichmz,whichint),drop=F])
-  cspec=combMSMS(ll,bin = dmz/10,reso = reso,reduce = F,mzlim = range(itmp[,whichmz])+c(-2,2)*dmz,intlim = 0,intlim2 = 0)
-  cspec=cbind(as.numeric(rownames(cspec)),rowSums(cspec))
-  nsp=2
-  lpks=.GRfindturnpoint(cspec[,2])$pks
-  if(length(lpks)==0){nsp=1;lpks=which(.GRipeaks(-diff(diff(cspec[,2])),span = 2*nsp+1))+1}
-  lpks=outer(lpks,-nsp:nsp,"+")           
-  lpks[which(lpks<1 | lpks>nrow(cspec))]=NA
-  newsp=t(apply(lpks,1,function(x) c(mz=weighted.mean(cspec[x,1],cspec[x,2],na.rm = T),y=max(cspec[x,2],na.rm = T))))
-  newsp[,2]=newsp[,2]*sum(itmp[,whichint])/sum(newsp[,2])
-  llsplit[[i]]=cbind(0,newsp)
-}
+    itmp=llsplit[[i]]
+    if(length(unique(itmp[,1]))==1) next
+    ll=tapply(1:nrow(itmp),itmp[,whichid],function(y) itmp[y,c(whichmz,whichint),drop=F])
+    cspec=combMSMS(ll,bin = dmz/10,reso = reso,reduce = F,mzlim = range(itmp[,whichmz])+c(-2,2)*dmz,intlim = 0,intlim2 = 0)
+    cspec=cbind(as.numeric(rownames(cspec)),rowSums(cspec))
+    nsp=2
+    lpks=.GRfindturnpoint(cspec[,2])$pks
+    if(length(lpks)==0){nsp=1;lpks=which(.GRipeaks(-diff(diff(cspec[,2])),span = 2*nsp+1))+1}
+    lpks=outer(lpks,-nsp:nsp,"+")           
+    lpks[which(lpks<1 | lpks>nrow(cspec))]=NA
+    newsp=t(apply(lpks,1,function(x) c(mz=weighted.mean(cspec[x,1],cspec[x,2],na.rm = T),y=max(cspec[x,2],na.rm = T))))
+    newsp[,2]=newsp[,2]*sum(itmp[,whichint])/sum(newsp[,2])
+    llsplit[[i]]=cbind(0,newsp)
+  }
   finalcs=do.call("rbind",llsplit)
   colnames(finalcs)=c(whichid,whichmz,whichint)
   finalcs[,3]= finalcs[,3]*sum(xtmp[,whichint])/sum( finalcs[,3])
   finalcs[order(finalcs[,2]),,drop=F]
 }
-  
-  
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' 
+#' Merge list of ms/ms spectra
+#' 
+#' @param split list of spectra
+#' @param dmz delta m/z for merging
+#' @param fct  merging function
+#' 
+#' @export
+mergeMSMS.2<-function(splist,dmz=0.001,fct=sum){
+  whichmz="mz"
+  whichint="y"
+  nspec=length(splist)
+  xtmp=do.call("rbind",lapply(1:nspec,function(x) cbind(sc=x,mz=splist[[x]][,whichmz],y=splist[[x]][,whichint])))
+  if(nrow(xtmp)<2) return(xtmp)
+  xtmp=xtmp[order(xtmp[,whichmz],xtmp[,whichint]),,drop=F]
+  xtmp=xtmp[order(xtmp[,whichmz],xtmp[,whichint]),,drop=F]
+  diffmz=diff(xtmp[,whichmz])
+  while(any(diffmz<dmz) & nrow(xtmp)>1){
+    (imerg=which.min(diffmz))
+    # if(!keepMax){
+    xtmp[imerg+1,whichmz]=weighted.mean(xtmp[imerg+(0:1),whichmz],xtmp[imerg+(0:1),whichint])
+    xtmp[imerg+1,whichint]=sum(xtmp[imerg+(0:1),whichint])
+    #  } else imerg=imerg+which.min(xtmp[imerg+(0:1),whichint])-1
+    xtmp=xtmp[-imerg,]
+    xtmp=xtmp[order(xtmp[,whichmz]),,drop=F]
+    diffmz=diff(xtmp[,whichmz])
+  }
+  xtmp
+}

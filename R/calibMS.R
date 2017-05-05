@@ -17,6 +17,7 @@
 calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T,retMat=F){
   
   # dppm=20;bw=2.5;minpts=31;bkpoint=200;calInt=c(80,350)
+  
   if("xcmsRaw"%in%class(filein)){
     xRaw=filein
     cat("xRaw file from ",unclass(xRaw@filepath),"\n",sep="")
@@ -130,7 +131,7 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calIn
     axis(2,at=yl,las=2,pos=min(xl));axis(1,at=xl,pos=min(yl))
     lines(min(xl):max(xl),pred,col=2,lwd=2)
     
-    pred=predict(gam(res~s(calmz),data=matdf,subset=out),newdata = data.frame(calmz=min(xl):max(xl)))
+    pred=predict(mgcv:::gam(res~s(calmz),data=matdf,subset=out),newdata = data.frame(calmz=min(xl):max(xl)))
     yl=pretty(range(c(matdf$res[matdf$out],-1:1,pred),na.rm=T))
     plot(matdf$calmz,matdf$res,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="Residuals")
     lines(min(xl):max(xl),pred,col=4,lwd=2)

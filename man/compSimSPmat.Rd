@@ -5,7 +5,7 @@
 \title{Compute smilarity between 1 or 2 MS/MS sparse matrices}
 \usage{
 compSimSPmat(m1, m2 = NULL, weight = c(m = NA, n = NA), plim = 10^-5,
-  useSqrt = TRUE)
+  useSqrt = TRUE, retPerc = TRUE)
 }
 \arguments{
 \item{m1}{Sparse matrix}
@@ -17,6 +17,8 @@ compSimSPmat(m1, m2 = NULL, weight = c(m = NA, n = NA), plim = 10^-5,
 \item{plim}{set anything below plim to zero}
 
 \item{useSqrt}{should sqrt tranform the intensities}
+
+\item{retPerc}{return perc overlap}
 }
 \description{
 Compute smilarity between 1 or 2 MS/MS sparse matrices

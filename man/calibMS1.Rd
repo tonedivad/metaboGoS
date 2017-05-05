@@ -27,5 +27,5 @@ calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 31,
 \item{doPlot}{should plot}
 }
 \value{
-xcms
+list of matches and calibration function/paramters
 }

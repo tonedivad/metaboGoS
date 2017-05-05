@@ -14,8 +14,11 @@
 mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out = 5),maxIter=9,
                     indicatorVec=c(sid="Sid",grp="GrpEIC",height='intensity',
                                    frmin="mz10",frcen="mz50",frmax="mz90",
-                                   mzmin="mzmin",mz="mz",mzmax="mzmax",
+                                   mzmin="mzmin",mz="mz50",mzmax="mzmax",
                                    rtmin="rtmin",rtmax="rtmax",rt="rt")){
+  
+  # indicatorVec=c(sid="Sid",grp="GrpEIC",height='intensity',frmin="mz10",frcen="mz50",frmax="mz90",mzmin="mzmin",mz="mz50",mzmax="mzmax",rtmin="rtmin",rtmax="rtmax",rt="rt")
+  # dppm=2.5;dmz=0.001;lbw=seq(dppm*2,dppm/2,length.out = 5);maxIter=9
   
   ## rough grouping on mz
   currsplit <- .GRsplistMZ(matroi[,indicatorVec["frcen"]],  dppm = NA,dmz=20*dmz)
@@ -34,7 +37,7 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   crois=currois0
   cstats=currstats0
   doLoop=T;iter=0
-  cat(" -- step2: ",sep="")
+  cat(" --> step2: ",sep="")
   while(doLoop & iter<maxIter){
     iter=iter+1
     cat(iter,sep="")
@@ -58,7 +61,7 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   cat(" --> step3: ",nrow(crois)," rois / ",nrow(cstats)," eic groups\n",sep="")
   
   ## step 4 refine based on density
-  cat(" -- step4: ",sep="")
+  cat(" --> step4: ",sep="")
   for(ibw in lbw){
     cat(" ",ibw,"-",sep="")
     l2split=cstats$GrpEIC[which((cstats$dppm>=(2*dppm) | cstats$dppm0>=(2*dppm)) | cstats$mndups>1)]
@@ -89,30 +92,36 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   invisible(eicmat)
 }
 
+
+
+
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #' 
 #' Gather the rois for each resfile
 #' 
 #' @param fileres List of files
+#' @param what what
 #' 
 #' @keywords internal
 #' 
 #' @export
-infctMRoi.get<-function(fileres){
+infctMRoi.get<-function(fileres,what='RoiInfos'){
   
+  fileres=fileres[file.exists(fileres)]
+  if(length(fileres)==0) stop('No file found')
   if(is.null(names(fileres))) names(fileres)=paste0("S",1:length(fileres))
   
 arois=list()
 for(isid in names(fileres)){
   cat(".")
   load(fileres[isid])
-  y=obj$RoiInfos
+  y=obj[[what]]
   if(is.null(y)) next
   y$Sid=isid
   arois[[isid]]=y
 }
 arois=do.call("rbind",arois)
-if("mz"%in%names(arois)) arois=arois[order(arois$mz),]
+if(any(grepl("mz",names(arois)))) arois=arois[order(rowMeans(arois[,grep("mz",names(arois))])),]
 rownames(arois)=NULL
 return(arois)
 }
@@ -399,15 +408,15 @@ infctMRoi.compstats<-function(arois,indicatorVec){
   mzmax=indicatorVec['frmax']
   
   currstats=data.frame(do.call("rbind",tapply(1:nrow(arois),arois[,grp],function(x){
-    v0=10^6*(range(arois[x,mz])/median(arois[x,mz])-1)
+ #   v0=10^6*(range(arois[x,mzmed])/median(arois[x,mz])-1)
     v=10^6*(range(arois[x,mzmed])/median(arois[x,mzmed])-1)
     vrt=range(arois[x,rtmin],arois[x,rtmax])
     c(arois[x[1],grp],
-      median(arois[x,mz]),diff(v0),
+   #  median(arois[x,mzmed]),diff(v0),
       median(arois[x,mzmed]),diff(v),v,
       range(arois[x,mzmin],arois[x,mzmax]),
       median(arois[x,rt]),vrt,length(unique(arois[x,sid])),max(table(arois[x,sid])),length(x))
   })))
-  names(currstats)=c(grp,mz,"dppm0",mzmed,"dppm","dppmmin","dppmax",mzmin,mzmax,rt,rtmin,rtmax,"nsid","mndups","n")
+  names(currstats)=c(grp,mzmed,"dppm","dppmmin","dppmax",mzmin,mzmax,rt,rtmin,rtmax,"nsid","mndups","n")
   return(currstats)
 }

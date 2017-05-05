@@ -55,4 +55,44 @@ readMGFfile<-function(filein,namIdx='DBSpId',startIdx=1,minpk=1){
   return(list(DF=dfsp,MS=lsp))
 }
 
+######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## ######## 
+#' Export a list of files to MSP
+#'
+#' @param spec list of spectra 
+#' @param plim min intensity in perc.
+#' @param outfile file to be written
+#' @param roundint rounding for intensity
+#' @param roundmz rounding for m/z
+#' @return List of tempdir/file locations
+#' @export
+
+export2MSP<-function(spec,outfile=NULL,plim=10^-5,roundint=0,roundmz=5,topSp=Inf){
+  
+  ## plim=0;roundint=0;roundmz=5
+  specnam=names(spec)
+  if(is.null(specnam)) specnam=paste0("SP",1:length(spec))
+  
+  idx=0
+  pks=list()
+  for(ix in 1:length(spec)){
+    vmz=spec[[ix]][,"mz"]
+    vint=spec[[ix]][,"y"]
+    l2k=which(vint/max(vint)>plim)
+    if(length(l2k)==0) next
+    if(length(l2k)>topSp) l2k=l2k[rank(-vint[l2k])[1:topSp]]
+    l2k=l2k[order(vmz[l2k])]
+    idx=idx+1
+    header2exp=c("",sprintf("Name:  %s",specnam[ix]),
+                 sprintf("DB#:  %d", idx),
+                 sprintf("Num Peaks:  %d", length(l2k)))
+    
+     spec2exp=sprintf(paste0("%.",roundmz,"f %.",roundint,"f; "),vmz[l2k],vint[l2k])
+    spec2exp=sapply(split(spec2exp, ceiling(seq_along(spec2exp)/10)),paste,collapse = " ")
+    pks[[ix]]=c(header2exp,spec2exp)
+  }
+  if(!is.null(outfile)) cat(unlist(pks),file=outfile,sep="\n")
+  invisible(pks)
+}
+
+
 

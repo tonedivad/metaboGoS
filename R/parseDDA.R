@@ -18,7 +18,7 @@
 #' @export
 parseOneDDA<-function(cefi,parDeco=NULL,add2File=NULL,defIsolation=0.501,calibFct=NULL,cleanMS2=TRUE,
                       save=FALSE,outfile=NULL,roundmz=6,verbose=T,
-                      sid=add2File$Sid,useSid=!is.null(sid),stype=NULL,rtlim=suppressWarnings(range(parDeco$rtlim))){
+                      sid=add2File$Sid,useSid=!is.null(sid),stype=NULL,rtlim=suppressWarnings(sort(range(parDeco$rtlim)))){
   
   # sid=NULL;stype=NA;method="qn";roundmz=5;winsize=0.51;dppm=30;dmz=0.01;verbose=T;save=FALSE;outfile=NULL;useSid=FALSE;rtlim=c(.6,14.5);MinIntBP=1000
   

@@ -55,15 +55,14 @@
   index.min = index$index.min
   index.max = index$index.max
   imax <- which(index.max)
-  if(!is.na(snr.thresh)) good.snr = (noise.local[imax])>=snr.thresh else good.snr = (noise.local[imax])
+  if(!is.na(snr.thresh)) good.snr = (y[imax]/noise.local[imax])>=snr.thresh else good.snr = (noise.local[imax])
   tick.loc <- imax[good.snr]
   if ((npeak = length(tick.loc)) == 0) 
     return(data.frame())
   tick.left <- tick.right <- rep(1, length(tick.loc))
   for (i in 1:length(tick.loc)) {
     tick.left[i] <- max(which(index.min[1:tick.loc[i]]))
-    tick.right[i] <- min(which(index.min[tick.loc[i]:length(x)])) + 
-      tick.loc[i] - 1
+    tick.right[i] <- min(which(index.min[tick.loc[i]:length(x)])) + tick.loc[i] - 1
   }
   if (tick.right[length(tick.loc)] == 1) 
     tick.right[length(tick.loc)] <- length(x)
