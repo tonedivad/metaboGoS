@@ -12,7 +12,7 @@ calibMS1(filein, lmzcalib, dppm = 20, bw = 2.5, minpts = 31,
 \arguments{
 \item{filein}{Path to the input file or xcmsRaw object}
 
-\item{lmzcalib}{Calibration masses}
+\item{lmzcalib}{Calibration masses or method name in BGIons}
 
 \item{dppm}{Mass error}
 

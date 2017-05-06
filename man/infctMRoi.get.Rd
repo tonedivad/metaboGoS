@@ -4,10 +4,12 @@
 \alias{infctMRoi.get}
 \title{Gather the rois for each resfile}
 \usage{
-infctMRoi.get(fileres)
+infctMRoi.get(fileres, what = "RoiInfos")
 }
 \arguments{
 \item{fileres}{List of files}
+
+\item{what}{what}
 }
 \description{
 Gather the rois for each resfile

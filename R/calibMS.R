@@ -4,7 +4,7 @@
 #' some stufff
 #'
 #' @param filein Path to the input file or xcmsRaw object
-#' @param lmzcalib Calibration masses
+#' @param lmzcalib Calibration masses or method name in BGIons
 #' @param dppm Mass error
 #' @param bw Bandwidth to group masses
 #' @param minpts Minimum of points
@@ -15,6 +15,14 @@
 #' @return list of matches and calibration function/paramters
 #' @export
 calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calInt),calInt=c(70,500),typ=1,doPlot=T,retMat=F){
+  
+  if(is.character(lmzcalib) & length(lmzcalib)==1){
+    data(BGIons)
+    if(!lmzcalib%in%names(BGIons)) stop('Method not recognised')
+    cat("Using predefined background ions for method ",lmzcalib," -> n=",sep="")
+    lmzcalib=BGIons[[lmzcalib]]
+    cat(length(lmzcalib),"\n")
+  }
   
   # dppm=20;bw=2.5;minpts=31;bkpoint=200;calInt=c(80,350)
   
@@ -120,11 +128,11 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calIn
   matdf$res=matdf$dppm-matdf$pred
   
   if(doPlot){
-    par(mfrow=c(1,2),mar=c(5,4.5,1,.2))
+    par(mfrow=c(1,2),mar=c(5,4.5,1,.2),cex.main=1)
     xl=pretty(range(c(matdf$calmz,calInt)))
     pred=calfct(min(xl):max(xl),calpars)
     yl=pretty(range(c(matdf$dppm,0,pred),na.rm=T))
-    plot(matdf$calmz,matdf$dppm,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="delta ppm")
+    plot(matdf$calmz,matdf$dppm,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="delta ppm",main=basename(filein))
     abline(h=-1:1,lty=c(2,1,2))
     abline(v=calpars["brk"],col="grey",lwd=2)
     abline(v=calpars[names(calpars)%in%c("low","high")],col="grey",lwd=1,lty=2)
@@ -133,7 +141,7 @@ calibMS1<-function(filein,lmzcalib,dppm=20,bw=2.5,minpts=31,bkpoint=median(calIn
     
     pred=predict(mgcv:::gam(res~s(calmz),data=matdf,subset=out),newdata = data.frame(calmz=min(xl):max(xl)))
     yl=pretty(range(c(matdf$res[matdf$out],-1:1,pred),na.rm=T))
-    plot(matdf$calmz,matdf$res,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="Residuals")
+    plot(matdf$calmz,matdf$res,col=matdf$out+1,ylim=range(yl),axes=F,xlim=range(xl),xlab="m/z",ylab="Residuals",main=basename(filein))
     lines(min(xl):max(xl),pred,col=4,lwd=2)
     abline(h=-1:1,lty=c(2,1,2))
     abline(v=calpars["brk"],col="grey",lwd=2)

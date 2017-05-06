@@ -25,3 +25,12 @@ NULL
 #' @keywords datasets
 #' @format Vector of canonical SMILES with the 1st block inchikey
 NULL
+
+#' BGIons.
+#'
+#' @name BGIons
+#' @usage data(BGIons)
+#' @docType data
+#' @keywords datasets
+#' @format List of masses for mass calibration
+NULL

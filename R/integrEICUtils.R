@@ -9,18 +9,21 @@
 #' @param l2excl vector of sample ids to be excluded when refining peak allocations
 #' @param doPlot plotting at each step, vector of 0,1,2 - disabled if run in parallele
 #' @param nSlaves num slaves
+#' @param minPeakHeight minPeakHeight
 #' @import matrixStats
 #' @return peak matrix data.frame
 #' @export
-.MGmultiEICintgrPar<-function(alleicmat,parDeco,l2excl=NULL,doPlot=1,nSlaves=1){
+.MGmultiEICintgrPar<-function(alleicmat,parDeco,l2excl=NULL,doPlot=1,nSlaves=1,minPeakHeight=NULL){
+  
+  ## may be different to initial  parDeco$minHeightMS1??
+  if(is.null(minPeakHeight)) minPeakHeight=max(parDeco$minHeightMS1,parDeco$minNoiseMS1*parDeco$sbr)
   
 llre=list()
 ll=names(alleicmat)#[111:120]
 lperc=""
-
-
-ll=ll[which(sapply(alleicmat[ll],function(x) max(x$y,na.rm=T))>=parDeco$minHeightMS1)]
+ll=ll[which(sapply(alleicmat[ll],function(x) max(x$y,na.rm=T))>=minPeakHeight)]
 if(length(ll)>20) lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+
 
 if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
 if(nSlaves>1){
@@ -32,13 +35,14 @@ if(nSlaves>1){
 ### Parallele bit
 if(nSlaves>1)
    llre=foreach(idx = ll,.packages = c("metaboGoS"), .verbose =FALSE)  %dopar%{
-    re=.MGmultiEICintgr(eic=alleicmat[[idx]],parDeco,doPlot = 0,l2excl = l2excl)
+    re=.MGmultiEICintgr(eic=alleicmat[[idx]],parDeco,doPlot = 0,l2excl = l2excl,minPeakHeight=minPeakHeight)
     if(is.null(re)) return(list())
     data.frame(RoiId=idx,re)
   }
 ## Serial bit
 if(nSlaves<=1) for(idx in ll){
-  re=.MGmultiEICintgr(eic=alleicmat[[idx]],parDeco,doPlot = doPlot,l2excl = l2excl)
+  if(idx %in% lperc) cat(idx,"(",which(ll==idx),") ",sep="")
+  re=.MGmultiEICintgr(eic=alleicmat[[idx]],parDeco,doPlot = doPlot,l2excl = l2excl,minPeakHeight=minPeakHeight)
   if(is.null(re)) next
   llre[[idx]]=data.frame(RoiId=idx,re)
 }
@@ -65,18 +69,19 @@ return(ares)
 #' @param parDeco deconvolution parameter list
 #' @param l2excl vector of sample ids to be excluded when refining peak allocations
 #' @param doPlot plotting at each step, vector of 0,1,2
+#' @param minPeakHeight minPeakHeight
 #' @import matrixStats
 #' @return peak matrix data.frame
 #' @export
 .MGmultiEICintgr<-function(eic,parDeco=list(psdrt=0.00446,span=7,
-                                            minHeightMS1=100000,minNoiseMS1=5000),l2excl=NULL,doPlot=0){
+                                            minHeightMS1=100000,minNoiseMS1=5000),l2excl=NULL,doPlot=0,minPeakHeight=10^6){
 
   m=t(eic$y2)#/1000000
   m0=t(eic$y)#/1000000
   mmz=t(eic$mz)#/1000000
   if(all(colnames(m)%in%l2excl)) return(NULL) ## if all to be excluded then stop
   maxm0=max(m0[,!colnames(m0)%in%l2excl],na.rm=T)
-  if(maxm0<parDeco$minHeightMS1) return(NULL)
+  if(maxm0<minPeakHeight) return(NULL)
   span=parDeco$span
   minNoise=parDeco$minNoiseMS1
   
@@ -122,7 +127,7 @@ if(any(sapply(llpk,is.list))) llpk=unlist(llpk,recursive = F)
 for(i in 1:length(llpk)) apks$PkCl[llpk[[i]]]=i
 
 ## only keep the ones with large 
-l2k=as.numeric(names(which(tapply(apks$tick.int*2,apks$Pk,max)>parDeco$minHeightMS1 & tapply(apks$tick.snr,apks$Pk,max)>2)))
+l2k=as.numeric(names(which(tapply(apks$tick.int*2,apks$Pk,max)>minPeakHeight & tapply(apks$tick.snr,apks$Pk,max)>2)))
 l2k=l2k[l2k%in%unique(apks$PkCl[!apks$Sid%in%l2excl])]
 apks=apks[apks$Pk%in%l2k,]
 if(nrow(apks)==0) return(NULL)
@@ -189,7 +194,7 @@ for(idx in names(llpks)){
 }
 
 matpks=do.call("rbind",matpks)
-lupk=which(tapply(matpks$int.ap,matpks$Pk,max)>=parDeco$minHeightMS1 &
+lupk=which(tapply(matpks$int.ap,matpks$Pk,max)>=minPeakHeight &
              tapply(matpks$snr.sm,matpks$Pk,max)>=2 &
              tapply(matpks$npts,matpks$Pk,max)>=floor(nspan/2))
 if(length(lupk)==0) return(NULL)

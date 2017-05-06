@@ -7,7 +7,7 @@
 parseOneDDA(cefi, parDeco = NULL, add2File = NULL, defIsolation = 0.501,
   calibFct = NULL, cleanMS2 = TRUE, save = FALSE, outfile = NULL,
   roundmz = 6, verbose = T, sid = add2File$Sid, useSid = !is.null(sid),
-  stype = NULL, rtlim = suppressWarnings(range(parDeco$rtlim)))
+  stype = NULL, rtlim = suppressWarnings(sort(range(parDeco$rtlim))))
 }
 \arguments{
 \item{cefi}{Path to the input file}

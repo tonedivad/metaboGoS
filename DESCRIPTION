@@ -4,7 +4,7 @@ Title: Metabolomics
 Version: 0.0.0.9000
 Authors@R: person("David", "Enot", email = "david.enot@gustaveroussy.fr", role = c("aut", "cre"))
 Description: Bits and pieces to deal with the DD(I)A from our Orbitrap
-Depends: R (>= 3.3.3), chron, xcms, mzR, XML, dplyr, GRMeta
+Depends: R (>= 3.3.3), chron, xcms, mzR, XML, dplyr, GRMeta, yaml
 Encoding: UTF-8
 License: GPL (>= 2)
 LazyData: true

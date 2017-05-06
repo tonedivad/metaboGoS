@@ -7,8 +7,8 @@
 mergeROIs(matroi, dppm = 2.5, dmz = 0.001, lbw = seq(dppm * 2, dppm/2,
   length.out = 5), maxIter = 9, indicatorVec = c(sid = "Sid", grp =
   "GrpEIC", height = "intensity", frmin = "mz10", frcen = "mz50", frmax =
-  "mz90", mzmin = "mzmin", mz = "mz", mzmax = "mzmax", rtmin = "rtmin", rtmax =
-  "rtmax", rt = "rt"))
+  "mz90", mzmin = "mzmin", mz = "mz50", mzmax = "mzmax", rtmin = "rtmin", rtmax
+  = "rtmax", rt = "rt"))
 }
 \arguments{
 \item{matroi}{Data frame of ROIs}
