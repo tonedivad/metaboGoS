@@ -90,6 +90,7 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   eicmat$ovl[llsplit[,1]]=llsplit[,2]
   eicmat$RoiId=sprintf("R%.5f@%.2f-%.2f",eicmat$mz,eicmat$rtmin,eicmat$rtmax)
   invisible(eicmat)
+ # invisible(list(eicmat=eicmat,crois=crois))
 }
 
 

@@ -12,13 +12,14 @@
 #' @param nSlaves number of slaves for parallel
 #' @param save numbl
 #' @param outfile n
+#' @param paddRT extra padding for RT
 #' @import foreach
 #' @import doParallel
 #' @return metaboGoS obj with RoiInfos / PeakInfos /params
 #' @export
-eicXtract<-function(infile,eicmat,addppm=NA,refFct=metaboGoS:::.MGfill,drt,nSlaves=1,save=FALSE,outfile=NULL,...){
+eicXtract<-function(infile,eicmat,addppm=NA,refFct=metaboGoS:::.MGfill,drt,nSlaves=1,save=FALSE,outfile=NULL,paddRT=drt,...){
   
-print(infile)
+cat("Processing ", infile, " - ",nrow(eicmat)," EICs to fecth\n",sep="")
 #drt=0.00446
 xr=xcmsRaw(infile)
 if(!is.na(addppm)) xr=.GRcorrRawPPM(xr,addppm)
@@ -29,7 +30,8 @@ sc2nrt=cbind(scan=1:length(xr@scantime),nscan=sc2nrt,nrt=round(newrtx[sc2nrt],5)
 
 allxeic=list()
 ll=eicmat$RoiId#[101:150]
-lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+lperc=""
+if(length(ll)>20) lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
 
 if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
 if(nSlaves>1){
@@ -43,7 +45,8 @@ if(nSlaves>1){
   #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
   allxeic=foreach(iroi = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
     i=which(eicmat$RoiId==iroi)
-    xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = (range(eicmat[i,c("rtmin","rtmax")])+c(-2,2)*drt)*60,padsc = T) # extrat pad for the newscan
+    rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-1,1)*paddRT)
+    xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc = T) # extrat pad for the newscan
     if(all(is.na(xeic[,"y"]))) return(NULL)
     xeic=cbind(xeic,sc2nrt[xeic[,"scan"],2:3])
     df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...)))
@@ -57,9 +60,9 @@ if(nSlaves>1){
 }
 ## Serial bit
 if(nSlaves<=1) for(iroi in ll){
-  if(iroi%in%lperc) cat(iroi," ")
+  if(iroi %in% lperc) cat(iroi,"(",which(ll==iroi),") ",sep="")
   i=which(eicmat$RoiId==iroi)
-  rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-3,3)*drt)
+  rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-1,1)*paddRT)
 xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc = T) # extrat pad for the newscan
 if(all(is.na(xeic[,"y"]))) next
 xeic=cbind(xeic,sc2nrt[xeic[,"scan"],2:3])
