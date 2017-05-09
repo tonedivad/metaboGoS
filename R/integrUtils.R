@@ -57,8 +57,7 @@
   imax <- which(index.max)
   if(!is.na(snr.thresh)) good.snr = (y[imax]/noise.local[imax])>=snr.thresh else good.snr = (noise.local[imax])
   tick.loc <- imax[good.snr]
-  if ((npeak = length(tick.loc)) == 0) 
-    return(data.frame())
+  if (length(tick.loc) == 0)    return(data.frame())
   tick.left <- tick.right <- rep(1, length(tick.loc))
   for (i in 1:length(tick.loc)) {
     tick.left[i] <- max(which(index.min[1:tick.loc[i]]))
@@ -142,6 +141,7 @@
 #' @return a brand new eic
 #' @export
 .MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
+  
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
   index.min = index$index.min
@@ -150,8 +150,7 @@
   tick.loc <-imax[((y/bsl)>=snr.thresh & bslscore>1)[imax]]
   tick.loc2 <-imax[(bslscore[imax]>1)]
   tick.loc2=tick.loc2[!tick.loc2%in%tick.loc]
-  if ((npeak = length(tick.loc)) == 0) 
-    return(data.frame())
+  if (length(tick.loc) == 0) return(data.frame())
   
   ### remove valleys to close to each other
   ival<- which(index.min)
@@ -184,7 +183,9 @@
     }
   }
   
+  ## if no valleys outside the tick.loc
   if(min(tick.loc)<min(which(index.min))) index.min[max(which(rev(diff(y[rev(1:min(tick.loc))]))>0)-1,1)]=TRUE
+  if(max(tick.loc)>max(which(index.min))) index.min[max(max(tick.loc)+which(diff(y[max(tick.loc):length(y)])>0)[1],length(y))]=TRUE
   
   
   # 

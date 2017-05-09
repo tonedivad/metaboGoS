@@ -46,30 +46,28 @@ if(nSlaves>1){
   allxeic=foreach(iroi = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
     i=which(eicmat$RoiId==iroi)
     rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-1,1)*paddRT)
-    xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc = T) # extrat pad for the newscan
+    xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc =TRUE) # extrat pad for the newscan
     if(all(is.na(xeic[,"y"]))) return(NULL)
     xeic=cbind(xeic,sc2nrt[xeic[,"scan"],2:3])
-    df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...)))
+    if(!is.null(refFct)) df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...))) else df=xeic
     return(list(iroi,df))
   }
   allxeic=allxeic[sapply(allxeic,length)==2]
   nallxeic=sapply(allxeic,function(x) x[[1]]) 
   allxeic=lapply(allxeic,function(x) x[[2]])
   names(allxeic)=nallxeic
-  
 }
 ## Serial bit
 if(nSlaves<=1) for(iroi in ll){
   if(iroi %in% lperc) cat(iroi,"(",which(ll==iroi),") ",sep="")
   i=which(eicmat$RoiId==iroi)
   rtrange=(range(eicmat[i,c("rtmin","rtmax")])+c(-1,1)*paddRT)
-xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc = T) # extrat pad for the newscan
+xeic=.GRrawMat(xr,mzrange=range(eicmat[i,c("mzmin","mzmax")]),rtrange = rtrange*60,padsc =TRUE) # extrat pad for the newscan
 if(all(is.na(xeic[,"y"]))) next
 xeic=cbind(xeic,sc2nrt[xeic[,"scan"],2:3])
 #if(any(table(xeic[,"scan"])>1)) print(c(sum(table(xeic[,"scan"])>1),i))
-df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...)))
-#df=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,span=7)))
-allxeic[[iroi]]=df
+if(!is.null(refFct)) allxeic[[iroi]]=data.frame(do.call("cbind",.MGfill(xeic,drt=drt,...))) else allxeic[[iroi]]=xeic
+
 }
 
 if(nSlaves>1) stopCluster(clProc)

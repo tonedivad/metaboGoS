@@ -222,6 +222,7 @@
     vvb=v-vb;vvb[vvb<0]=0
     v0=m0[lx,apks$Sid[i]]
     vmz=mmz[lx,apks$Sid[i]]
+    if(all(is.na(vmz))) next
     lnna=which(!is.na(v0))
     lnna=lnna[order(abs(lnna-which.max(v)),-v0[lnna])]
     if(length(lnna)>nspan) lnna=lnna[1:nspan] 

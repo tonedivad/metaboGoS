@@ -370,9 +370,11 @@ extractPIRoi<-function(obj,
   colnames(ROImat1)=c(colnames(ROImat),"drt","intensity","rt")
   
   l2k=which(ROImat1[,"intensity"]>=parDeco$minHeightMS1 & ROImat1[,"drt"]>=minRTwin & ROImat1[,"rtmin"]<=rtlim[4] & ROImat1[,"rtmax"] >= rtlim[1])
-  ROImat1=ROImat1[l2k,]
-  ROImat1[ROImat1[,"rtmin"]<=rtlim[1],"rtmin"]=rtlim[1]
-  ROImat1[ROImat1[,"rtmax"]>=rtlim[4],"rtmax"]=rtlim[4]
+  ROImat1=ROImat1[l2k,,drop=FALSE]
+  l=which(ROImat1[,"rtmin"]<=rtlim[1])
+  if(length(l)) ROImat1[l,"rtmax"]=rtlim[1]
+  l=which(ROImat1[,"rtmax"]<=rtlim[4])
+  if(length(l)) ROImat1[l,"rtmax"]=rtlim[4]
   
   ### Combine dupl -> remerge retention time -> could be improved!?!
   llover=GRMeta:::.GRisover(ROImat1[,"mzmin"],ROImat1[,"mzmax"],retOne = T)
