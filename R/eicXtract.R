@@ -135,6 +135,77 @@ eicGather<-function(files,eics,conv2df=FALSE){
 
 eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHeightMS1,doPlot=T){
   
+  
+  .infctreframe<-function(eic,lsamp2use,parDeco,minHeight,addrt,doPlot,main=""){
+#    for(ix in names(leics)){
+ #     eic=leics[[ix]]
+      l=which(eic$Sid%in%lsamp2use & !is.na(eic$mz))
+      ieic=eic[l,]
+      rmz=range(ieic[,"mz"])
+      mindmz=min(c(mean(rmz)*parDeco$ppm*10^-6,parDeco$dmz))/2
+      
+      if(doPlot){
+        ymz=range(pretty(range(eic$mz,na.rm=TRUE)+c(-0.001,0.001)))
+        yrt=range(pretty(range(eic$nrt,na.rm=TRUE)+c(-0.2,0.2)))
+        l=which(!is.na(eic$mz))
+        k <- MASS::kde2d(eic$mz[l], eic$nrt[l],h = c(0.001,0.05),lims = c(ymz,yrt))
+        #      k$z=k$z #*sum(!is.na(eic$mz))/sum(k$z)
+        k$z[k$z<0.001]=NA
+        image(k, col=colorRampPalette(rev(brewer.pal(9,'Greys')))(11)[11:6],main=main)
+        abline(v=seq(min(ymz),max(ymz),median(ymz)*5*10^-6))
+        ic=as.numeric(cut(ieic$y,c(0,parDeco$minHeightMS1,minHeight,Inf)))
+        l=which(ieic$y>=parDeco$minHeightMS1)
+        points(ieic$mz[l],ieic$nrt[l],pch=16,col=ic[l],cex=c(.2,1,.8)[ic[l]])
+        #      abline(v=range(ieic$mz,na.rm=TRUE))
+      }
+      lusid=unique(ieic$Sid[ieic$y>=parDeco$minHeightMS1])
+      ### loop over each sample
+      allre=NULL
+      for(ii in lusid){
+        l2=which(ieic$Sid== ii& ieic$y>parDeco$minHeightMS1)
+        llx<-.MGinquickSplit(ieic[l2,],ncons=3,dppm = parDeco$ppm,dmz=parDeco$dmz,minNoise=parDeco$minHeightMS1)[[1]]
+        if(length(llx)==0) next
+        ldrmz=sapply(llx,function(x) diff(range(ieic[l2[x],"mz"])))
+        l=which(ldrmz<=max(quantile(ldrmz,.75),mindmz))
+        mllx=lapply(GRMeta:::.GRmergellx(llx[l]),function(x) l2[unique(x)])
+        re=do.call("rbind",lapply(mllx,function(x) c(range(ieic$mz[x]),range(ieic$nrt[x]),max(ieic$y[x]),ieic$mz[x[which.max(ieic$y[x])]])))
+        #
+        if(doPlot)  apply(re,1,function(x) rect(x[1],x[3],x[2],x[4]))
+        allre=rbind(allre,re)
+      }
+      if(is.null(allre)) return(NULL)
+      isover=.GRisover2(allre[,1],allre[,2],allre[,3]-addrt,allre[,4]+addrt,retOne = T,thr1 =mindmz,thr2=10^-4)
+      newwin=do.call("rbind",lapply(isover,function(x){
+        y=c(mz=range(allre[x,1:2]),rt=range(allre[x,3:4]),mzmed=matrixStats:::weightedMedian(allre[x,6],allre[x,5]))
+        c(y,range(y[c(5,5,1,1,2,2)]*(1+0.5*c(-parDeco$ppm,parDeco$ppm,-1,1,-1,1)*10^-6),y[1:2]),int=max(allre[x,5]))
+      }))
+      newwin=newwin[which(newwin[,'int']>=minHeight),,drop=F]
+      if(nrow(newwin)==0) return(NULL)
+      if(nrow(newwin)>1){
+        isover=.GRisover2(newwin[,6],newwin[,7],newwin[,3]-addrt,newwin[,4]+addrt,retOne = T,thr1 =mindmz,thr2=10^-4)
+        newwin=do.call("rbind",lapply(isover,function(x){
+          c(range(newwin[x,1:2]),range(newwin[x,3:4]),
+            mzmed=matrixStats:::weightedMedian(newwin[x,5],newwin[x,"int"]),range(newwin[x,6:7]),int=max(newwin[x,"int"]))
+        }))
+      }
+      leics=list()
+      for(i in 1:nrow(newwin)){
+        x=newwin[i,]
+        l=which(eic$nrt>=(x[3]-addrt) & eic$nrt<=(x[4]+addrt))
+        neic=eic[l,]
+        l=which(neic$mz<(x[6]) | neic$mz>x[7])
+        if(length(l)) neic$mz[l]=NA
+        ldups=which(duplicated(neic[,c("Sid","scan","id")]))
+        if(length(ldups)) stop('dupps')
+        leics[[i]]=neic
+      }
+     # leics[[ix]]=NULL
+      
+      if(doPlot) apply(newwin,1,function(x) rect(x[6],x[3]-1*addrt,x[7],x[4]+1*addrt,border = 4,lwd=2))
+  
+    return(leics)
+  }
+  
   aeics=aeics0=eicGather(fileres,listRois,conv2df = T)
   
   # (ix=names(aeics)[17])
@@ -164,6 +235,7 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
   
   ## 2) second pass screening set of eics first
   l2chk=c()
+  neics=list()
   for(ix in names(aeics)){
     cat(".")
     eic=aeics[[ix]]
@@ -194,95 +266,57 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
       }
       next
     }
-    l2chk=c(l2chk,ix)
-  }
-  if(length(aeics)==0) return(NULL)
-  
-  ########### 3) reduce the m/z and rt range if too wide
-  for(ix in l2chk){
-    eic=aeics[[ix]]
-    l=which(eic$Sid%in%lsamp2use & !is.na(eic$mz))
-    ieic=eic[l,]
-    rmz=range(ieic[,"mz"])
-    mindmz=min(c(mean(rmz)*parDeco$ppm*10^-6,parDeco$dmz))/2
-    
-    if(doPlot){
-      ymz=range(pretty(range(eic$mz,na.rm=TRUE)+c(-0.001,0.001)))
-      yrt=range(pretty(range(eic$nrt,na.rm=TRUE)+c(-0.2,0.2)))
-      l=which(!is.na(eic$mz))
-      k <- MASS::kde2d(eic$mz[l], eic$nrt[l],h = c(0.001,0.05),lims = c(ymz,yrt))
-#      k$z=k$z #*sum(!is.na(eic$mz))/sum(k$z)
-      k$z[k$z<0.001]=NA
-      image(k, col=colorRampPalette(rev(brewer.pal(9,'Greys')))(11)[11:6],main=ix)
-      abline(v=seq(min(ymz),max(ymz),median(ymz)*5*10^-6))
-      ic=as.numeric(cut(ieic$y,c(0,parDeco$minHeightMS1,minHeight,Inf)))
-      l=which(ieic$y>=parDeco$minHeightMS1)
-      points(ieic$mz[l],ieic$nrt[l],pch=16,col=ic[l],cex=c(.2,1,.8)[ic[l]],main=paste(ix))
-#      abline(v=range(ieic$mz,na.rm=TRUE))
-    }
-    lusid=unique(ieic$Sid[ieic$y>=parDeco$minHeightMS1])
-    ### loop over each sample
-    allre=NULL
-    for(ii in lusid){
-      l2=which(ieic$Sid== ii& ieic$y>parDeco$minHeightMS1)
-      llx<-.MGinquickSplit(ieic[l2,],ncons=3,dppm = parDeco$ppm,dmz=parDeco$dmz,minNoise=parDeco$minHeightMS1)[[1]]
-      if(length(llx)==0) next
-      ldrmz=sapply(llx,function(x) diff(range(ieic[l2[x],"mz"])))
-      l=which(ldrmz<=max(quantile(ldrmz,.75),mindmz))
-      mllx=lapply(GRMeta:::.GRmergellx(llx[l]),function(x) l2[unique(x)])
-      re=do.call("rbind",lapply(mllx,function(x) c(range(ieic$mz[x]),range(ieic$nrt[x]),max(ieic$y[x]),ieic$mz[x[which.max(ieic$y[x])]])))
-      #
-      if(doPlot)  apply(re,1,function(x) rect(x[1],x[3],x[2],x[4]))
-      allre=rbind(allre,re)
-    }
-    if(is.null(allre)){
-      print(ix)
-      aeics[[ix]]=NULL
-      next
-    }
-    isover=.GRisover2(allre[,1],allre[,2],allre[,3]-addrt,allre[,4]+addrt,retOne = T,thr1 =mindmz,thr2=0)
-    newwin=do.call("rbind",lapply(isover,function(x){
-      y=c(mz=range(allre[x,1:2]),rt=range(allre[x,3:4]),mzmed=matrixStats:::weightedMedian(allre[x,6],allre[x,5]))
-      c(y,range(y[c(5,5,1,1,2,2)]*(1+0.5*c(-parDeco$ppm,parDeco$ppm,-1,1,-1,1)*10^-6),y[1:2]),int=max(allre[x,5]))
-    }))
-    newwin=newwin[which(newwin[,'int']>=minHeight),,drop=F]
-    if(nrow(newwin)==0){
-      print(ix)
-      aeics[[ix]]=NULL
-      next
-    }
-    if(nrow(newwin)>1){
-      isover=.GRisover2(newwin[,6],newwin[,7],newwin[,3]-addrt,newwin[,4]+addrt,retOne = T,thr1 =mindmz,thr2=0)
-      newwin=do.call("rbind",lapply(isover,function(x){
-        c(range(newwin[x,1:2]),range(newwin[x,3:4]),mzmed=matrixStats:::weightedMedian(newwin[x,5],newwin[x,"int"]),range(newwin[x,6:7]),int=max(newwin[x,"int"]))
-      }))
-    }
-    
-    for(i in 1:nrow(newwin)){
-      x=newwin[i,]
-      l=which(eic$nrt>=(x[3]-addrt) & eic$nrt<=(x[4]+addrt))
-      neic=eic[l,]
-      l=which(neic$mz<(x[6]) & neic$mz>x[7])
-      if(length(l)) neic$mz[l]=NA
-      ldups=which(duplicated(neic[,c("Sid","scan","id")]))
-     # if(length(ldups)) stop('dupps')
-      aeics[[paste0(ix,"-",i)]]=neic
+    re=.infctreframe(eic,lsamp2use,parDeco,minHeight,addrt,doPlot,main = ix)
+    if(!is.null(re)){
+      names(re)=paste0(ix,"-",1:length(re))
+      neics=c(neics,re)
     }
     aeics[[ix]]=NULL
     
-    if(doPlot) apply(newwin,1,function(x) rect(x[6],x[3]-1*addrt,x[7],x[4]+1*addrt,border = 4,lwd=2))
   }
-  # if(length(llneic)>0) aeics=c(aeics,llneic)
+  if(length(neics)>0) aeics=c(aeics,neics)
   if(length(aeics)==0) return(NULL)
+  
+  # ########### 3) reduce the m/z and rt range if too wide
+  # if(length(l2chk)>0){
+  #   leics=.infctreframe(aeics[l2chk],lsamp2use,parDeco,minHeight,addrt,doPlot)
+  #   aeics=aeics[!names(aeics)%in%l2chk]
+  # if(length(leics)>0) aeics=c(aeics,leics)
+  # }
+  
+  ########## check if rois overlap
+  eicmat2=data.frame(do.call("rbind",lapply(aeics,function(x) c(round(range(x$nrt),4),round(range(x$mz,na.rm=T),6),
+                                                                round(matrixStats:::weightedMedian(x$mz,x$y,na.rm=T),6)))))
+  names(eicmat2)=c("rtmin","rtmax","mzmin","mzmax","mz50")
+  eicmat2$RoiId=sprintf("R%.5f@%.2f-%.2f",eicmat2$mz50,eicmat2$rtmin,eicmat2$rtmax)
+  llover=.GRisover2(eicmat2$mzmin,eicmat2$mzmax,eicmat2$rtmin,eicmat2$rtmax,T,10^-4,parDeco$psdrt)
+  
+  l2reframe=which(sapply(llover,length)>1)
+  if(length(l2reframe)>0){
+    for(ix in l2reframe){
+      leics=do.call("rbind",aeics[llover[[ix]]])
+      leics=leics[which(!duplicated(leics)),]
+      leics=leics[order(leics$Sid,leics$nrt),]
+      re=.infctreframe(leics,lsamp2use,parDeco,minHeight,addrt,doPlot)
+      if(!is.null(re)) aeics=c(aeics,re)
+    }
+    aeics=aeics[-unlist(llover[l2reframe])]
+  }
   
   eicmat3=data.frame(do.call("rbind",lapply(aeics,function(x) c(round(range(x$nrt),4),round(range(x$mz,na.rm=T),6),
                                                                 round(matrixStats:::weightedMedian(x$mz,x$y,na.rm=T),6)))))
   names(eicmat3)=c("rtmin","rtmax","mzmin","mzmax","mz50")
+  eicmat3$RoiId=sprintf("R%.5f@%.2f-%.2f",eicmat3$mz50,eicmat3$rtmin,eicmat3$rtmax)
+  #llover=.GRisover2(eicmat3$mzmin,eicmat3$mzmax,eicmat3$rtmin,eicmat3$rtmax,T,10^-4,parDeco$psdrt)
   ldups=which(!duplicated(eicmat3))
   eicmat3=eicmat3[ldups,]
   aeics=aeics[ldups]
   eicmat3$RoiIdo=names(aeics)
-  rownames(eicmat3)=names(aeics)=eicmat3$RoiId=sprintf("R%.5f@%.2f-%.2f",eicmat3$mz50,eicmat3$rtmin,eicmat3$rtmax)
+  rownames(eicmat3)=names(aeics)=eicmat3$RoiId
+    
+  # if(length(llneic)>0) aeics=c(aeics,llneic)
+  if(length(aeics)==0) return(NULL)
+  
   lso=order(eicmat3$mz50,eicmat3$rtmin)
   aeics=aeics[lso]
   eicmat3=eicmat3[lso,]
