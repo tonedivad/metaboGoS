@@ -2,7 +2,7 @@
 % Please edit documentation in R/eicXtract.R
 \name{eicGather2}
 \alias{eicGather2}
-\title{Merge ROIs/EICs from several files}
+\title{Merge ROIs/EICs from several files not very fast plus pbs with duplicated roi at the end  and/or scan}
 \usage{
 eicGather2(fileres, listRois, parDeco, lsamp2use,
   minHeight = parDeco$minHeightMS1, doPlot = T)
@@ -21,5 +21,5 @@ eicGather2(fileres, listRois, parDeco, lsamp2use,
 \item{files}{list of files}
 }
 \description{
-Merge ROIs/EICs from several files
+Merge ROIs/EICs from several files not very fast plus pbs with duplicated roi at the end  and/or scan
 }

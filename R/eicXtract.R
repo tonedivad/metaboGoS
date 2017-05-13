@@ -34,7 +34,7 @@ eicXtract<-function(infile,eicmat,addppm=NA,refFct=metaboGoS:::.MGfill,drt,nSlav
   
   if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
   if(nSlaves>1){
-    clProc<-makeCluster(nSlaves)
+    clProc<-makeForkCluster(nSlaves)
     doParallel:::registerDoParallel(clProc)
     cat(" -- registering ",nSlaves," clusters\n",sep="")
   }
@@ -130,6 +130,7 @@ eicGather<-function(files,eics,conv2df=FALSE){
 #' @param doPlot should it be plotted
 #' 
 #' @import matrixStats
+#' @import MASS
 #' @export
 
 eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHeightMS1,doPlot=T){
@@ -170,7 +171,7 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
     
     rmz=range(eic$mz[l],na.rm=T)
     rmz0=range(eic$mz,na.rm=T)
-    rmz2=weightedMedian(eic$mz[l],eic$y[l],na.rm=T)
+    rmz2=matrixStats:::weightedMedian(eic$mz[l],eic$y[l],na.rm=T)
     rmz2=range(rmz2*(1+c(-1,1)*parDeco$ppm*10^-6),rmz2+c(-1,1)*parDeco$dmz)
     isok=max(table(eic$scan[l],eic$Sid[l])) ## no duplicates
     isok1=(rmz[1]>rmz2[1] & rmz[2]<rmz2[2]) ## all sample are within parDeco
@@ -205,17 +206,26 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
     rmz=range(ieic[,"mz"])
     mindmz=min(c(mean(rmz)*parDeco$ppm*10^-6,parDeco$dmz))/2
     
-    lusid=unique(ieic$Sid[ieic$y>=parDeco$minHeightMS1])
     if(doPlot){
-      ic=as.numeric(cut(eic$y,c(0,parDeco$minHeightMS1,minHeight,Inf)))
-      plot(eic$mz,eic$nrt,pch=16,col=ic,cex=c(.2,1,.8)[ic],main=paste(ix))
-      abline(v=range(ieic$mz,na.rm=TRUE))
+      ymz=range(pretty(range(eic$mz,na.rm=TRUE)+c(-0.001,0.001)))
+      yrt=range(pretty(range(eic$nrt,na.rm=TRUE)+c(-0.2,0.2)))
+      l=which(!is.na(eic$mz))
+      k <- MASS::kde2d(eic$mz[l], eic$nrt[l],h = c(0.001,0.05),lims = c(ymz,yrt))
+#      k$z=k$z #*sum(!is.na(eic$mz))/sum(k$z)
+      k$z[k$z<0.001]=NA
+      image(k, col=colorRampPalette(rev(brewer.pal(9,'Greys')))(11)[11:6],main=ix)
+      abline(v=seq(min(ymz),max(ymz),median(ymz)*5*10^-6))
+      ic=as.numeric(cut(ieic$y,c(0,parDeco$minHeightMS1,minHeight,Inf)))
+      l=which(ieic$y>=parDeco$minHeightMS1)
+      points(ieic$mz[l],ieic$nrt[l],pch=16,col=ic[l],cex=c(.2,1,.8)[ic[l]],main=paste(ix))
+#      abline(v=range(ieic$mz,na.rm=TRUE))
     }
+    lusid=unique(ieic$Sid[ieic$y>=parDeco$minHeightMS1])
     ### loop over each sample
     allre=NULL
     for(ii in lusid){
-      l2=which(ieic$Sid== ii& ieic$y>500000)
-      llx<-.MGinquickSplit(ieic[l2,],ncons=3,dppm = parDeco$ppm,dmz=parDeco$dmz,minNoise=500000)[[1]]
+      l2=which(ieic$Sid== ii& ieic$y>parDeco$minHeightMS1)
+      llx<-.MGinquickSplit(ieic[l2,],ncons=3,dppm = parDeco$ppm,dmz=parDeco$dmz,minNoise=parDeco$minHeightMS1)[[1]]
       if(length(llx)==0) next
       ldrmz=sapply(llx,function(x) diff(range(ieic[l2[x],"mz"])))
       l=which(ldrmz<=max(quantile(ldrmz,.75),mindmz))
@@ -230,9 +240,9 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
       aeics[[ix]]=NULL
       next
     }
-    isover=.GRisover2(allre[,1],allre[,2],allre[,3],allre[,4],retOne = T,thr1 = max(allre[1,1]*parDeco$ppm*10^-6,parDeco$dmz)/2,thr2=addrt)
+    isover=.GRisover2(allre[,1],allre[,2],allre[,3]-addrt,allre[,4]+addrt,retOne = T,thr1 =mindmz,thr2=0)
     newwin=do.call("rbind",lapply(isover,function(x){
-      y=c(range(allre[x,1:2]),range(allre[x,3:4]),mzmed=weightedMedian(allre[x,6],allre[x,5]))
+      y=c(mz=range(allre[x,1:2]),rt=range(allre[x,3:4]),mzmed=matrixStats:::weightedMedian(allre[x,6],allre[x,5]))
       c(y,range(y[c(5,5,1,1,2,2)]*(1+0.5*c(-parDeco$ppm,parDeco$ppm,-1,1,-1,1)*10^-6),y[1:2]),int=max(allre[x,5]))
     }))
     newwin=newwin[which(newwin[,'int']>=minHeight),,drop=F]
@@ -242,9 +252,9 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
       next
     }
     if(nrow(newwin)>1){
-      isover=.GRisover2(newwin[,6],newwin[,7],newwin[,3],newwin[,4],retOne = T,thr1 =0.001,thr2=addrt)
+      isover=.GRisover2(newwin[,6],newwin[,7],newwin[,3]-addrt,newwin[,4]+addrt,retOne = T,thr1 =mindmz,thr2=0)
       newwin=do.call("rbind",lapply(isover,function(x){
-        c(range(allre[x,1:2]),range(allre[x,3:4]),mzmed=weightedMedian(newwin[x,5],newwin[x,"int"]),range(newwin[x,5:6]),int=max(newwin[x,"int"]))
+        c(range(newwin[x,1:2]),range(newwin[x,3:4]),mzmed=matrixStats:::weightedMedian(newwin[x,5],newwin[x,"int"]),range(newwin[x,6:7]),int=max(newwin[x,"int"]))
       }))
     }
     
@@ -260,12 +270,13 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
     }
     aeics[[ix]]=NULL
     
-    if(doPlot) apply(newwin,1,function(x) rect(x[6],x[3]-1*addrt,x[7],x[4]+1*addrt,border = 2))
+    if(doPlot) apply(newwin,1,function(x) rect(x[6],x[3]-1*addrt,x[7],x[4]+1*addrt,border = 4,lwd=2))
   }
   # if(length(llneic)>0) aeics=c(aeics,llneic)
   if(length(aeics)==0) return(NULL)
   
-  eicmat3=data.frame(do.call("rbind",lapply(aeics,function(x) c(round(range(x$nrt),4),round(range(x$mz,na.rm=T),6),round(weightedMedian(x$mz,x$y,na.rm=T),6)))))
+  eicmat3=data.frame(do.call("rbind",lapply(aeics,function(x) c(round(range(x$nrt),4),round(range(x$mz,na.rm=T),6),
+                                                                round(matrixStats:::weightedMedian(x$mz,x$y,na.rm=T),6)))))
   names(eicmat3)=c("rtmin","rtmax","mzmin","mzmax","mz50")
   ldups=which(!duplicated(eicmat3))
   eicmat3=eicmat3[ldups,]
@@ -345,74 +356,102 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-#' @name eicXtract
 #' 
-#' Fetch ROIs/EICs across files+
+#' Fetch ROIs/EICs across files
 #'
-#' @param infile metaboGoS obj
+#' @param listEics list of eics to be processed
 #' @param parDeco deconvolution paramters
-#' @param refFct refining function
+#' @param refFct cleaning function
 #' @param nSlaves number of slaves for parallel
-#' @param outfile n
+#' @param outfile name of the outfile
 #' @param what columns to export
+#' @param chunk chunk size for parallel processing
+#' @param verbose verbose
 #' @import foreach
 #' @import doParallel
 #' @return list of eics
 #' @export
-.MGfillMulti<-function(listEics,parDeco,refFct=metaboGoS:::.MGfill,nSlaves=1,outfile=NULL,what=c("y","y2","mz")){
-  
-  cat("Processing ", length(listEics), " Roi/EICs\n",sep="")
+.MGfillMulti<-function(listEics,parDeco,refFct=metaboGoS:::.MGfill,nSlaves=1,outfile=NULL,what=c("y","y2","mz"),chunk=50,verbose=TRUE){
   
   allxeic=list()
   ll=names(listEics)#eicmat$RoiId#[101:150]
-  lperc=""
-  if(length(ll)>20) lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
-  if(length(ll)>50) lperc=ll[round(seq(1,length(ll),length=22)[2:21])]
-  
+  ll=split(ll, ceiling(seq_along(ll)/chunk))
+  n0=length(listEics)
+  listEics=lapply(ll,function(x) listEics[x])
+  cat("Processing ", n0, " Roi/EICs split in ",length(ll)," chunk of avg. size=",round(mean(sapply(ll,length)),1),sep="")
+  # 
+  # 
+  # 
+  # 
+  #   lperc=""
+  # if(length(ll)>20) lperc=ll[round(seq(1,length(ll),length=12)[2:11])]
+  # if(length(ll)>50) lperc=ll[round(seq(1,length(ll),length=22)[2:21])]
+  # 
   if(nSlaves>1)   nSlaves=max(1, min(nSlaves,detectCores()-1))
   if(nSlaves>1){
+    if(nSlaves>length(listEics)) nSlaves=length(listEics)
     clProc<-makeCluster(nSlaves)
     doParallel:::registerDoParallel(clProc)
     cat(" -- registering ",nSlaves," clusters\n",sep="")
   }
   
-  ### Parallele bit
-  if(nSlaves>1){
-    #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
-    allxeic=foreach(iroi = ll,.packages = c("metaboGoS"), .verbose =F)  %dopar%{
-      xeic=listEics[[iroi]]
-      xieic=list()
+  .infctMGfillMulti<-function(leics,parDeco,what,tempout=TRUE,verbose=TRUE){
+    
+    eiclist=list()
+    for(iroi in names(leics)){ 
+      if(verbose) cat(".")
+      ieic=list()
+      xeic=leics[[iroi]]
       for(ii in unique(xeic$Sid))
-        xieic[[ii]]=.MGfill(xeic[xeic$Sid==ii,],drt=parDeco$psdrt,span = parDeco$span,minNoise=parDeco$minNoiseMS1,bw=parDeco$bw)[,c(what,"nscan",'rt')]
-      if(length(xieic)==0) return(NULL)
-      lsc=max(sapply(xieic,function(x) min(x[,"nscan"]))):min(sapply(xieic,function(x) max(x[,"nscan"])))
-      ieic=lapply(xieic,function(x) x[match(lsc,x[,"nscan"]),what])
+        ieic[[ii]]=.MGfill(xeic[xeic$Sid==ii,],drt=parDeco$psdrt,span = parDeco$span,minNoise=parDeco$minNoiseMS1,bw=parDeco$bw,retbsl = FALSE,minpts = 3)[,c(what,"nscan",'rt')]
+      if(length(ieic)==0) next
+      lsc=max(sapply(ieic,function(x) min(x[,"nscan"]))):min(sapply(ieic,function(x) max(x[,"nscan"])))
+      ieic=lapply(ieic,function(x) x[match(lsc,x[,"nscan"]),what])
       ieic=lapply(what,function(iwhat) t(sapply(ieic,function(x) x[,iwhat]))) 
       ieic=lapply(ieic,function(x){colnames(x)=lsc;x})
       names(ieic)=what
-      return(list(iroi,ieic))
+      eiclist[[iroi]]=ieic
+      rm(list=c('xeic','ieic'))
     }
-    allxeic=allxeic[sapply(allxeic,length)==2]
-    nallxeic=sapply(allxeic,function(x) x[[1]]) 
-    allxeic=lapply(allxeic,function(x) x[[2]])
-    names(allxeic)=nallxeic
+    if(tempout){
+      if(length(eiclist)==0) return(NULL)
+      outfile=paste0(tempdir(),"/tmp",gsub("[A-Z@-\\.]","",names(eiclist)[1]),".rda")
+      save(file=outfile,eiclist)
+      return(outfile)
+    }
+    invisible(eiclist)
   }
+  
+  
+  ### Parallele bit
+  if(nSlaves>1){
+    #llre=foreach(i = ll, .export = fct2exp,.packages = c("igraph","xcms","GRMeta"), .verbose =F)  %dopar%{
+    ltmpfiles=foreach(ieics = listEics,.export = ".infctMGfillMulti",.packages = c("metaboGoS"), .verbose =F)  %dopar%{
+      .infctMGfillMulti(ieics,parDeco,what,tempout=TRUE,verbose = FALSE)
+    }
+    ltmpfiles=unlist(ltmpfiles)
+  }
+  
   ## Serial bit
-  if(nSlaves<=1) for(iroi in ll){
-    if(iroi %in% lperc) cat(iroi,"(",which(ll==iroi),") ",sep="")
-    xeic=listEics[[iroi]]
-    xieic=list()
-    for(ii in unique(xeic$Sid))
-      xieic[[ii]]=.MGfill(xeic[xeic$Sid==ii,],drt=parDeco$psdrt,span = parDeco$span,minNoise=parDeco$minNoiseMS1,bw=parDeco$bw)[,c(what,"nscan",'rt')]
-    if(length(xieic)==0) next
-    
-    lsc=max(sapply(xieic,function(x) min(x[,"nscan"]))):min(sapply(xieic,function(x) max(x[,"nscan"])))
-    ieic=lapply(xieic,function(x) x[match(lsc,x[,"nscan"]),what])
-    ieic=lapply(what,function(iwhat) t(sapply(ieic,function(x) x[,iwhat]))) 
-    ieic=lapply(ieic,function(x){colnames(x)=lsc;x})
-    names(ieic)=what
-    allxeic[[iroi]]=ieic
+  if(nSlaves<=1){
+    ltmpfiles=c()
+    for(ii in 1:length(listEics)){
+      if(verbose) cat("Chunk ",ii,": ",sep="")
+      ltmpfiles[ii]=.infctMGfillMulti(listEics[[ii]],parDeco,what,tempout=TRUE,verbose = verbose)
+    }
   }
+  
+    ltmpfiles=ltmpfiles[file.exists(ltmpfiles)]
+  ### sort the rest out
+  allxeic=list()
+  for(ifile in ltmpfiles){
+    load(ifile)
+    if(!exists("eiclist")) next
+    if(!is.list(eiclist)) next
+    allxeic=c(allxeic,eiclist)
+    rm(list="eiclist")
+  }
+  
   cat('---> Found ',length(allxeic),"/",length(listEics),"\n",sep="")
   if(nSlaves>1) stopCluster(clProc)
   # if(save & is.null(outfile)) save(file=paste0(sub("([^.]+)\\.[[:alnum:]]+$", "\\1", infile),".rda"),allxeic,sc2nrt)

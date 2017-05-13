@@ -77,7 +77,9 @@ getMF.sirius<-function(precmz=NULL,ms1spec=NULL,ms2spec=NULL,ionProd="[M+H]1+",p
       rematch$MF=gsub(".* ","",rematch$MF)
       rematch$Adduct=ionProd
       newmass=round(sapply(rematch$MF,function(x) rcdk:::get.formula(x)@mass),6)
-      rematch=data.frame("PrecMZ"=precmz,"Mass"=newmass,"PPM"=round((newmass/precmz-1)*10^6,4),rematch)
+      iionprod=IPDB[IPDB$Name==ionProd,]
+      newmass2= (newmass*iionprod$xM+iionprod$adMass)/abs(iionprod$Charge)
+      rematch=data.frame("PrecMZ"=precmz,"Mass"=newmass,"PPM"=round((newmass2/precmz-1)*10^6,4),rematch)
     
        if(retAnn){
         

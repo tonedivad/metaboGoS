@@ -166,6 +166,10 @@
   names(apks)=gsub("pk\\.","tick.",names(apks))
   apks$PkCl=NA
   
+  ###### Correct RT here
+  
+  
+  
   ##### Split large peak lists into chunks
   llpk=.GRsplist(apks$tick.loc,d=6.1*nspan)
   if(any(sapply(llpk,is.list))) llpk=unlist(llpk,recursive = F)
@@ -360,10 +364,14 @@
   legs=paste0(sids," (",colSums(!is.na(m0)),")")
   legend("topright",legs,col=cols[colnames(m)],cex=.5,bty="n",ncol=1,pch=sidsl[colnames(m)],pt.cex=0.5)
   if(!is.null(matpks)){
-    cols2=rep(brewer.pal(8,"Dark2"),ceiling(max(matpks$Pk)/8))
+    cols2=rep(brewer.pal(8,"Dark2"),ceiling(max(matpks$Pk)/7))
+    names(cols2)=1:length(cols2)
+    
     text(matpks$rt,sqrt(matpks$int.sm/fac),sidsl[matpks$Sid],col=cols2[matpks$Pk])
-    abline(v=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=2,lwd=2)
-    abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
+    vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
+    abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
+    vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
+    abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
   }
   
   ylim=pretty(rmz)
@@ -376,9 +384,10 @@
   if(!is.null(matpks)){
     plot(range(matpks$rt),range(matpks$mz),ylim=range(ylim),xlim=range(xl)+c(0,diff(range(lrt)/10)),axes=F,xlab="rt",ylab="",col=cols2[matpks$Pk],pch=16,cex=0) #,main=iroi
     text(matpks$rt,matpks$mz,sidsl[matpks$Sid],col=cols2[matpks$Pk])
-    
-    abline(v=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=2,lwd=2)
-    abline(v=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2,col=brewer.pal(8,"Dark2")[1:max(matpks$Pk)],lty=3,lwd=2)
+    vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
+    abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
+    vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
+    abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
     abline(h=median(ylim)+(-n:n)*median(ylim)*10^-6,lty=2,col="grey")
     abline(v=xl,lty=2,col="grey")
     axis(2,at=ylim,las=2,pos=xl[1]);axis(1,at=xl,pos=ylim[1])
