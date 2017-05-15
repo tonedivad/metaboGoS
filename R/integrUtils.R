@@ -49,7 +49,7 @@
 #' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh=NA,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
+.MGsimpleIntegr<-function (x, y, noise.local, span = 5, snr.thresh=NA,minNoise=min(y,noise.local)*1.01,v2alim=0.8,span2=span+2){
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
   index.min = index$index.min
@@ -88,9 +88,9 @@
     releft=y[pks[,2]]/y[pks[,1]]
     reright=y[pks[,3]]/y[pks[,1]]
     releft[1]=reright[length(reright)]=0
-    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
+    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span2))
     if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
-    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
+    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span2))
     if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
   }
   ##
@@ -135,12 +135,13 @@
 #' @param y intensity
 #' @param noise.local +1/0/-1
 #' @param span bandwidth
+#' @param span2 merging span
 #' @param snr.thresh drt
 #' @param minNoise min noise for integrating
 #' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,noise.local)*1.01,v2alim=0.8){
+.MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,noise.local)*1.01,v2alim=0.8,span2=2*span+1-2){
   
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)
@@ -276,9 +277,9 @@
     releft=y[pks[,2]]/y[pks[,1]]
     reright=y[pks[,3]]/y[pks[,1]]
     releft[1]=reright[length(reright)]=0
-    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span+1))
+    l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span2))
     if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
-    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span+1))
+    l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span2))
     if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
   }
   ##

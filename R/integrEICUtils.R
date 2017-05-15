@@ -165,9 +165,15 @@
   }
   names(apks)=gsub("pk\\.","tick.",names(apks))
   apks$PkCl=NA
-  
+  apks0=apks
   ###### Correct RT here
-  
+  # apks=apks0
+  # isid="Il_AMuc-D14-E3_8a-qmneg"
+  # 
+  # for(isid in unique(apks$Sid)) for(i in which(apks$Sid==isid)){
+  #   apks[i,1:3]=round(apks[i,1:3]+approx(as.numeric(colnames(sumdrt)),sumdrt[isid,],apks[i,1:3])$y)
+  # }
+  # 
   
   
   ##### Split large peak lists into chunks
@@ -367,7 +373,7 @@
     cols2=rep(brewer.pal(8,"Dark2"),ceiling(max(matpks$Pk)/7))
     names(cols2)=1:length(cols2)
     
-    text(matpks$rt,sqrt(matpks$int.sm/fac),sidsl[matpks$Sid],col=cols2[matpks$Pk])
+    text(matpks$rt,sqrt(matpks$int.sm/fac),sidsl[matpks$Sid],col=cols2[matpks$Pk],cex=c(.5,1)[(matpks$InDeco>0)+1])
     vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
     abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
     vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
@@ -383,7 +389,7 @@
   par(mar=c(5,4,0,.1))
   if(!is.null(matpks)){
     plot(range(matpks$rt),range(matpks$mz),ylim=range(ylim),xlim=range(xl)+c(0,diff(range(lrt)/10)),axes=F,xlab="rt",ylab="",col=cols2[matpks$Pk],pch=16,cex=0) #,main=iroi
-    text(matpks$rt,matpks$mz,sidsl[matpks$Sid],col=cols2[matpks$Pk])
+    text(matpks$rt,matpks$mz,sidsl[matpks$Sid],col=cols2[matpks$Pk],cex=c(.5,1)[(matpks$InDeco>0)+1])
     vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
     abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
     vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
@@ -409,9 +415,15 @@
 #' 
 #' @export
 .infctverif<-function(ipks,m,nspan,l2excl=NULL,doplot=FALSE){
-  lsc=range(ipks[,1:3])+c(-1,1)*nspan
+  lsc=range(ipks[,1:3])+c(-2,2)*nspan
   lsc[1]=max(1,lsc[1]);lsc[2]=min(nrow(m),lsc[2]);lsc=lsc[1]:lsc[2]
   
+  
+  #  newsc=do.call("cbind",lapply(lusamp,function(isid) lsc-approx(as.numeric(colnames(sumdrt)),sumdrt[isid,],lsc)$y))
+  #  matplot(newsc,m[,lusamp,drop=F],typ="l")
+  # # # 
+  # 
+  # 
   lusamp=unique(ipks$Sid)
   lusamp=lusamp[!lusamp%in%l2excl]
   if(length(lusamp)>1) re=NMF:::loadings(NMF:::nmf(m[lsc,lusamp,drop=F], 1, 'snmf/l',seed='ica')) else re=m[lsc,lusamp,drop=F]

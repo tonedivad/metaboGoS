@@ -194,9 +194,22 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
         l=which(eic$nrt>=(x[3]-addrt) & eic$nrt<=(x[4]+addrt))
         neic=eic[l,]
         l=which(neic$mz<(x[6]) | neic$mz>x[7])
-        if(length(l)) neic$mz[l]=NA
-        ldups=which(duplicated(neic[,c("Sid","scan","id")]))
-        if(length(ldups)) stop('dupps')
+        if(length(l)>0){
+          neic$mz[l]=neic$y[l]=NA
+          ### sids without data
+          sid2rm=names(which(tapply(is.na(neic$mz),neic$Sid,all)))
+          if(length(sid2rm)>0) neic=neic[!neic$Sid%in%sid2rm,]
+          ### sids with duplicated scans
+          sid2dups=names(which(tapply(neic$scan,neic$Sid,function(x) max(table(x)))>1))
+          if(length(sid2dups)>0) for(j in sid2dups){
+          lnna=neic$scan[which(!is.na(neic$mz) & neic$Sid==j)]
+          lna=neic$scan[which(is.na(neic$mz) & neic$Sid==j)]
+          lsc2rm=intersect(lna,lnna)
+          if(length(lsc2rm)>0) neic=neic[which(!(is.na(neic$mz) & neic$Sid==j & neic$scan%in%lsc2rm)),]
+          }
+        }  
+        # ldups=which(duplicated(neic[,c("Sid","scan","id")]))
+        # if(length(ldups)) stop('dupps')
         leics[[i]]=neic
       }
      # leics[[ix]]=NULL
