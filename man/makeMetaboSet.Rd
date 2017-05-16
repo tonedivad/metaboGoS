@@ -6,10 +6,12 @@
 
 stuff}
 \usage{
-makeMetaboSet(matpks, metainfos)
+makeMetaboSet(matpks, eicdef = NULL, metainfos)
 }
 \arguments{
 \item{matpks}{peak matrix}
+
+\item{eicdef}{EICs definition}
 
 \item{metainfos}{metainfos}
 }

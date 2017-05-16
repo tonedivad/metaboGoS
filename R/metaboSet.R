@@ -5,10 +5,11 @@
 #' stuff
 #'
 #' @param matpks peak matrix
+#' @param eicdef EICs definition
 #' @param metainfos metainfos
 #' @return metaboSet
 #' @export
-makeMetaboSet<-function(matpks,metainfos){
+makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
   imeth=unique(metainfos$Method)
   lusampid=metainfos$Sid
   # metainfos=metaData[which(metaData$Sid%in%lusampid),c("Sid","sType","InjOrder")]
@@ -33,10 +34,11 @@ makeMetaboSet<-function(matpks,metainfos){
   l=which(newpkids$metnam==idup)
   newpkids$metnam[l]=sprintf("%.5f-%d@%.3f-%s",newpkids$mz[l],1:length(l),newpkids$rt[l],imeth)
 }
-  lvars=names(matpks)[!names(matpks)%in%c("RoiId","Sid","Pk","InDeco")]
+  lvars=names(matpks)[!names(matpks)%in%c("RoiId","Sid","Pk","PkCl")]
+  lvars=lvars[sapply(lvars,function(i) is.numeric(matpks[,i]))]
   
   alldata=list()
-  for(ivar in lvars){
+  if(length(lvars)) for(ivar in lvars){
     m=do.call("cbind",lapply(pkid2sid,function(x) round(matpks[x,ivar],6)))
     dimnames(m)=list(lusampid,newpkids$metnam)
     alldata[[ivar]]=m
@@ -59,6 +61,12 @@ makeMetaboSet<-function(matpks,metainfos){
   filedf$InjOrder=metadf$InjOrder=order(order(filedf$Date))
   
   allmat=list(Method=imeth,Sid=lusampid,Analyte=annot$Analyte,Annot=annot,Meta=metadf,File=filedf,Data=alldata)
+  if(!is.null(eicdef)){
+    eicdef=data.frame(PkId=paste0(eicdef$RoiId,";;",eicdef$Pk),eicdef)
+    eicdef=eicdef[,names(eicdef)%in%c('pk.span','pk.cl','Pk')]
+    allmat$EicDef=eicdef
+  }
+  
   class(allmat)=append(class(allmat),"metaboSet")
   invisible(allmat)
 }

@@ -336,7 +336,7 @@
 #' @keywords internal
 #' 
 #' @export
-.infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz,cols=NULL,sidsl=NULL,typs=NULL){
+.infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz,cols=NULL,sidsl=NULL,typs=NULL,main=NULL,v=NULL){
   
   lso=order(-colSums(m))
   m=sqrt(m[,lso,drop=F]/fac)
@@ -355,15 +355,16 @@
     typs=rep(1:6,ceiling(ncol(m)/6))[1:ncol(m)]
     names(typs)=sids
   }
-  
+  if(!is.null(v)) v=sqrt(v/fac)
   xl=pretty(lrt)
   ylim=pretty(c(0,max(m,na.rm=T),max(m0,na.rm=T),sqrt(matpks$int.sm/fac)))
   
   #par(mfrow=c(2,1),mar=c(5,4,1,.1))
   par(mfrow=c(2,1),mar=c(1,4,1,.1))
-  matplot(lrt,m,typ="l",ylim=range(ylim),xlim=range(xl)+c(0,diff(range(lrt)/10)),#main=iroi,
+  matplot(lrt,m,typ="l",ylim=range(ylim),xlim=range(xl)+c(0,diff(range(lrt)/10)),main=main,
           col=cols[colnames(m)],lty=typs[colnames(m)],axes=F,xlab="rt",ylab="Sqrt(Int)")
   # matplot(lrt,m0,typ="p",ylim=ylim,col=metaData[sids,]$Cols,pch=16,add=T)
+  if(!is.null(v)) lines(lrt,v,lwd=2,col="grey30")
   axis(2,at=ylim,ylim^2,las=2,pos=min(xl))
   # axis(1,at=xl,pos=min(ylim))
   abline(v=xl,lty=2,col="grey")
