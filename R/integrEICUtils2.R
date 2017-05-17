@@ -107,16 +107,21 @@
                                              minHeightMS1=100000,minNoiseMS1=5000),l2excl=NULL,doPlot=0,minPeakHeight=10^6,
                             colSa=NULL,letSa=NULL,typSa=NULL,main=NULL){
   
+
+  ########## ############ ########## ############ ##########
+  ## Prep data 
+  ########## ############ ########## ############ ##########
   m=t(eic$y2)#/1000000
   m0=t(eic$y)#/1000000
   mmz=t(eic$mz)#/1000000
-  # if(all(colnames(m)%in%l2excl)) return(NULL) ## if all to be excluded then stop
-  # maxm0=max(m0[,!colnames(m0)%in%l2excl],na.rm=T)
-  # if(maxm0<minPeakHeight) return(NULL)
+  if(all(colnames(m)%in%l2excl)) return(NULL) ## if all to be excluded then stop
+  maxm0=max(max(m0[,!colnames(m0)%in%l2excl],na.rm=T),max(m[,!colnames(m)%in%l2excl],na.rm=T))
+  if(maxm0<minPeakHeight) return(NULL)
+  
   span=parDeco$span
   minNoise=parDeco$minNoiseMS1
-  
   nspan=floor(span/2)*2+1
+  span2=ifelse(is.null(parDeco$Rois$span2),2*nspan+1,parDeco$Rois$span2)
   
   ## Fix color/letters
   if(is.null(letSa) & length(doPlot)){
@@ -133,49 +138,6 @@
   }
   
   ########## ############ ########## ############ ##########
-  ## Compute master peak 
-  ########## ############ ########## ############ ##########
-  lcol2use=which(!colnames(m)%in%l2excl)
-  if(length(lcol2use)>1){
-    nDim=ifelse(length(lcol2use)>2,2,1)
-    renmf<-try(NMF:::nmf(m[,lcol2use,drop=F], nDim, 'snmf/l',seed='ica'),T)
-    while("try-error"%in%class(renmf) & nDim>1){
-      nDim=nDim-1
-      renmf<-try(NMF:::nmf(m[,lcol2use,drop=F], nDim, 'snmf/l',seed='ica'),T)
-    }
-    if(!"try-error"%in%class(renmf)) renmfv=rowSums(NMF:::loadings(renmf))
-    if("try-error"%in%class(renmf)){
-      cat("Switch to svd \n",sep="")
-      renmfv=prcomp(m[,lcol2use,drop=F],center = FALSE)$x[,1]
-      if(cor(rowSums(m[,lcol2use,drop=F]),renmfv)<0) renmfv=-renmfv
-      renmfv[renmfv<0]=0
-    }
-  } else renmfv=m[,lcol2use] 
-  
-  ##### Compute baseline/peak bounds
-  rebsl=.MGinfctonebsl(renmfv,span=span,minNoise=minNoise)
-  
-  pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],snr.thresh =1.99,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2 = 2*nspan+1)
-  if(nrow(pks)==0){
-    cat(" -> snr down to 1 in ",main,"\n",sep="")
-    pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],snr.thresh =.99,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2 = 2*nspan+1)
-    
-  }
-  if(nrow(pks)==0) return(NULL)
-  
-  ### Only keep with high intensities clusters
-  l2k=which(tapply(1:nrow(pks),pks$pk.cl,function(x){
-    l=min(pks[x,1:3]):max(pks[x,1:3])
-    max(max(m0[,lcol2use],na.rm=T),max(m[,lcol2use],na.rm=T))
-  })>=minPeakHeight)
-  pks=pks[pks$pk.cl%in%names(l2k),]
-  if(nrow(pks)==0) return(NULL)
-  
-  ### relabel
-  pks$Pk=1:nrow(pks)
-  pks$PkCl=as.numeric(factor(pks$pk.cl))
-  
-  ########## ############ ########## ############ ##########
   ## Generate good peaks 
   ########## ############ ########## ############ ##########
   if(!all(c( "bsl","bslc")%in%names(eic))){
@@ -189,31 +151,120 @@
     mbsl=t(eic$bsl)
     mbslsc=t(eic$bslc)
   }
-  
+  ########
   apks=list()
   for(isid in colnames(m)){
     # x=1:nrow(m);y=m[,isid];bsl = mbsl[,isid];bslscore = mbslsc[,isid];snr.thresh =parDeco$sbsl;  span=nspan;minNoise = minNoise*1.01;v2alim = 0.8
-    re=.MGsimpleIntegr2(x=1:nrow(m),y=m[,isid],bsl = mbsl[,isid],bslscore = mbslsc[,isid],snr.thresh =parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+    re=.MGsimpleIntegr2(x=1:nrow(m),y=m[,isid],bsl = mbsl[,isid],bslscore = mbslsc[,isid],snr.thresh =parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2 = span2+2)
     if(nrow(re)==0) next
     re$Sid=isid
     apks[[isid]]=re
   }
   apks=do.call("rbind",apks)
   if(is.null(apks)){
-    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main)
     return(NULL)
   }
-  
   names(apks)=gsub("pk\\.","tick.",names(apks))
   apks$PkCl=apks$tick.max=NA
   ## get the max m0 in the peak region
   apks$tick.max=apply(apks,1,function(x) max(m0[x[2]:x[3],x['Sid']],na.rm=T))
   apks$Above=(apks$tick.int>=minPeakHeight | apks$tick.max>=minPeakHeight)
+  if(all(!apks$Above)){
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main)
+    return(NULL)
+  }
+  
+  
+  ########## ############ ########## ############ ##########
+  ## Compute master peak 
+  ########## ############ ########## ############ ##########
+  lcol2use=which(!colnames(m)%in%l2excl & colnames(m)%in%apks$Sid) ## before
+  if(length(lcol2use)==0){
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main)
+    return(NULL)
+  }
+  if(length(lcol2use)>1){
+    
+    sv <- svd(m[,lcol2use,drop=F], nu = 1, nv = 1)
+    renmfv=round(m[,lcol2use,drop=F]%*%sv$v,3)
+    renmfvnoise=round(sum(parDeco$minNoiseMS1*sv$v),3)
+    
+  if(cor(rowSums(m[,lcol2use,drop=F]),renmfv)<0){
+    renmfv=-renmfv
+    renmfvnoise=-renmfvnoise
+  }
+  renmfv[renmfv<renmfvnoise]=renmfvnoise
+  } else {renmfv=m[,lcol2use];renmfvnoise=parDeco$minNoiseMS1}
+  ##### Compute baseline/peak bounds
+  rebsl=.MGinfctonebsl(renmfv,span=span,minNoise=renmfvnoise)
+  
+ #  x=1:length(renmfv);y=renmfv;bsl=rebsl[[1]];bslscore=rebsl[[2]];minNoise = renmfvnoise;snr.thresh =1;span=nspan;v2alim = 0.8;span2 =span2
+  
+  pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],minNoise = renmfvnoise,snr.thresh =1,span=nspan,v2alim = 0.8,span2 =span2+2)
+  if(is.null(pks)){
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
+    return(NULL)
+  }
+  
+  # lcol2use=which(!colnames(m)%in%l2excl)
+  # if(length(lcol2use)>1){
+  #   nDim=ifelse(length(lcol2use)>2,2,1)
+  #   renmf<-try(NMF:::nmf(m[,lcol2use,drop=F], nDim, 'snmf/l',seed='ica'),T)
+  #   while("try-error"%in%class(renmf) & nDim>1){
+  #     nDim=nDim-1
+  #     renmf<-try(NMF:::nmf(m[,lcol2use,drop=F], nDim, 'snmf/l',seed='ica'),T)
+  #   }
+  #   if(!"try-error"%in%class(renmf)) renmfv=rowSums(NMF:::loadings(renmf))
+  #   if("try-error"%in%class(renmf)){
+  #     cat("Switch to svd \n",sep="")
+  #     renmfv=prcomp(m[,lcol2use,drop=F],center = FALSE)$x[,1]
+  #     if(cor(rowSums(m[,lcol2use,drop=F]),renmfv)<0) renmfv=-renmfv
+  #     renmfv[renmfv<0]=0
+  #   }
+  # } else renmfv=m[,lcol2use] 
+  # if(nrow(pks)==0){
+  #   cat(" -> snr down to 1 in ",main,"\n",sep="")
+  #   pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],snr.thresh =.99,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2 = 2*nspan+1)
+  #   
+  # }
+  
+
+  ### Only keep with high intensities clusters
+  l2k=which(tapply(1:nrow(pks),pks$pk.cl,function(x){
+    l=min(pks[x,1:3]):max(pks[x,1:3])
+    max(max(m0[,lcol2use],na.rm=T),max(m[,lcol2use],na.rm=T))
+  })>=minPeakHeight)
+  pks=pks[pks$pk.cl%in%names(l2k),]
+  if(nrow(pks)==0){
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
+    return(NULL)
+  }
+  
+  ### relabel
+  pks$Pk=1:nrow(pks)
+  pks$PkCl=as.numeric(factor(pks$pk.cl))
+  
+
+  
+  # minpk=matrix(FALSE,ncol=ncol(m),nrow=nrow(m),dimnames = dimnames(m))
+  # for(i in which(!apks$Sid%in%l2excl)) minpk[apks$tick.left[i]:apks$tick.right[i],apks$Sid[i]]=T
+  # lcol2use=which(colSums(minpk)>0)
+  # m2=m;m[!minpk]=0
+  # renmfv=prcomp(m[,lcol2use,drop=F],center = FALSE)$x[,1]
+  # if(cor(rowSums(m[,lcol2use,drop=F]),renmfv)<0) renmfv=-renmfv
+  # 
+  
   
   ########## ############ ########## ############ ##########
   ## Associate peak to clusters 
   ########## ############ ########## ############ ##########
   linpks=which(outer(apks$tick.loc,pks$pk.left,"-")>0 & outer(apks$tick.loc,pks$pk.right,"-")<0,arr.ind = T)
+  if(nrow(linpks)==0){
+    if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
+    return(NULL)
+  }
+  
   if(max(table(linpks[,1]))>1) cat("Dups found in ",main,"\n",sep="")
   apks$PkCl[linpks[,1]]=linpks[,2]
   
@@ -265,14 +316,6 @@
   }
   
   ########## ########## ########## ##########
-  # remove peaks no above \ sbr<lim
-  l2rm=which(is.na(apks$PkCl) & !(apks$Above & apks$tick.snr>=parDeco$sbslr))
-  if(length(l2rm)){
-    apksrm=rbind(apksrm,apks[l2rm,])
-    apks=apks[-l2rm,]
-  }
-  
-  ########## ########## ########## ##########
   # novel peak in l2excl
   l2rm=which(is.na(apks$PkCl) & apks$Sid%in%l2excl)
   if(length(l2rm)){
@@ -280,6 +323,15 @@
     apks=apks[-l2rm,]
   }
   
+  ########## ########## ########## ##########
+  # remove peaks no above \ sbr<lim
+  l2rm=which(is.na(apks$PkCl) & !(apks$Above & apks$tick.snr>=parDeco$sbslr))
+  if(length(l2rm)){
+    apksrm=rbind(apksrm,apks[l2rm,])
+    apks=apks[-l2rm,]
+  }
+  
+
   ########## ########## ########## ##########
   # may have forgotten some good peak???
   lnew=which(is.na(apks$PkCl))
@@ -299,18 +351,21 @@
   matpks$InDeco=1 ## for post processing analysis
   matpks=matpks[order(matpks$PkCl,matpks$Pk,matpks$Sid,matpks$rt),]
   
-  l=which(tapply(matpks$int.sm>=minPeakHeight | matpks$int.ap>=minPeakHeight,matpks$PkCl,any))
-  if(length(l)!=max(pks$PkCl)){
-    matpks=matpks[matpks$PkCl%in%names(l),]
-    matpks$PkCl=match(matpks$PkCl,names(l))
+  l=names(which(tapply(matpks$int.sm>=minPeakHeight | matpks$int.ap>=minPeakHeight,matpks$PkCl,any)))
+#  print(pks$PkCl)
+  
+  if(!all(matpks$PkCl%in%l)){
+    matpks$PkCl=match(matpks$PkCl,l)
+    pks$PkCl=match(pks$PkCl,l)
+    matpks=matpks[!is.na(matpks$PkCl),]
+    pks=pks[!is.na(pks$PkCl),]
     
-    pks=pks[pks$PkCl%in%names(l),]
-    pks$PkCl=match(pks$PkCl,names(l))
     
     ## make pk are from 1 to n
     lupk=unique(matpks$Pk)
     matpks$Pk=match(matpks$Pk,lupk)
     pks$Pk=match(pks$Pk,lupk)
+    pks=pks[!is.na(pks$Pk),]
     
   }
   
@@ -340,7 +395,7 @@
     l=which(matpks$Pk<currpk & matpks$Sid==isid);if(length(l)) iv[lx<max(matpks$rt[l])]=TRUE
     if(all(v[!iv]<(minNoise*2))) next
     ## lower down the snr
-    re=.MGsimpleIntegr2(x=lx,y=v,bsl = mbsl[lx,isid],bslscore = mbslsc[lx,isid],snr.thresh =1.01,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8)
+    re=.MGsimpleIntegr2(x=lx,y=v,bsl = mbsl[lx,isid],bslscore = mbslsc[lx,isid],snr.thresh =1.01,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2)
     if(nrow(re)){
       re=re[which.min(abs(re$pk.loc-ipkx$pk.loc)),]
       allre[[i]]=cbind(re,Sid=isid,tick.max=max(v0[re[1,2]:re[1,3]],na.rm=TRUE),PkCl=currpk)
@@ -366,7 +421,7 @@
     #iloc=which.max(v0[lx])
     l=which(v>(max(v)/20) & v>quantile(v,.2))
     llpks=.GRsplist(l,l,d=1.1)
-    llpksmax=which.max(sapply(llpks,function(x) max(v0[lx[x]],na.rm=T)))
+    llpksmax=suppressWarnings(which.max(sapply(llpks,function(x) max(v0[lx[x]],na.rm=T))))
     if(length(llpksmax)){
       llpks=llpks[[llpksmax]]
       llpkslx=lx[llpks]
@@ -395,6 +450,7 @@
   rownames(matpks)=rownames(pks)=NULL
   for(i in names(matpks)[grep("^rt",names(matpks))]) matpks[,i]=round(sc2rt[matpks[,i]],3)
   for(i in c( "pk.loc", "pk.left" ,"pk.right")) pks[,i]=round(sc2rt[pks[,i]],3)
+  if(nrow(apksrm)>0) for(i in c( "tick.loc", "tick.left" ,"tick.right")) apksrm[,i]=round(sc2rt[apksrm[,i]],3)
   matpks=matpks[order(matpks$Pk,matpks$Sid),]
   
   #### get the mz stats
@@ -408,10 +464,10 @@
   
   
   ############## Plot the whole stuff
-  if(doPlot) .infctintegrplot(m,m0,parDeco,matpks,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
+  if(doPlot) .infctintegrplot(m,m0,parDeco,matpks,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv,mpks=pks)
   
   ## return master peak??
-  invisible(list(Pks=pks,MatPks=matpks))
+  invisible(list(Pks=pks,MatPks=matpks,RmPks=apksrm))
 }
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 

@@ -141,7 +141,7 @@
 #' @param v2alim merge close apices if valley to apex less than 0.9
 #' @return a brand new eic
 #' @export
-.MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,noise.local)*1.01,v2alim=0.8,span2=2*span+1-2){
+.MGsimpleIntegr2<-function (x, y, bsl,bslscore,snr.thresh=2, span = 5,minNoise=min(y,bsl)*1.01,v2alim=0.8,span2=2*span+1-2){
   
   index <- GRMeta:::.GRmsExtrema(y, span = span)
   nvar <- length(x)

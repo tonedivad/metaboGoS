@@ -336,7 +336,7 @@
 #' @keywords internal
 #' 
 #' @export
-.infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz,cols=NULL,sidsl=NULL,typs=NULL,main=NULL,v=NULL){
+.infctintegrplot<-function(m,m0,parDeco,matpks,fac=10^6,rmz,cols=NULL,sidsl=NULL,typs=NULL,main=NULL,v=NULL,mpks=NULL){
   
   lso=order(-colSums(m))
   m=sqrt(m[,lso,drop=F]/fac)
@@ -365,6 +365,7 @@
           col=cols[colnames(m)],lty=typs[colnames(m)],axes=F,xlab="rt",ylab="Sqrt(Int)")
   # matplot(lrt,m0,typ="p",ylim=ylim,col=metaData[sids,]$Cols,pch=16,add=T)
   if(!is.null(v)) lines(lrt,v,lwd=2,col="grey30")
+  abline(h=sqrt(parDeco$minHeightMS1),lty=2)
   axis(2,at=ylim,ylim^2,las=2,pos=min(xl))
   # axis(1,at=xl,pos=min(ylim))
   abline(v=xl,lty=2,col="grey")
@@ -375,10 +376,19 @@
     names(cols2)=1:length(cols2)
     
     text(matpks$rt,sqrt(matpks$int.sm/fac),sidsl[matpks$Sid],col=cols2[matpks$Pk],cex=c(.5,1)[(matpks$InDeco>0)+1])
-    vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
-    abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
-    vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
-    abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
+    if(is.null(mpks)){
+      vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
+      abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
+      vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
+      abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
+    }
+    if(!is.null(mpks)){
+      vm=mpks$pk.left+parDeco$psdrt*2
+      abline(v=vm,col=cols2[mpks$Pk],lty=2,lwd=2)
+      vm=mpks$pk.right-parDeco$psdrt*2
+      abline(v=vm,col=cols2[mpks$Pk],lty=2,lwd=2)
+    }
+    
   }
   
   ylim=pretty(rmz)
@@ -391,10 +401,18 @@
   if(!is.null(matpks)){
     plot(range(matpks$rt),range(matpks$mz),ylim=range(ylim),xlim=range(xl)+c(0,diff(range(lrt)/10)),axes=F,xlab="rt",ylab="",col=cols2[matpks$Pk],pch=16,cex=0) #,main=iroi
     text(matpks$rt,matpks$mz,sidsl[matpks$Sid],col=cols2[matpks$Pk],cex=c(.5,1)[(matpks$InDeco>0)+1])
-    vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
-    abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
-    vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
-    abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
+    if(is.null(mpks)){
+      vm=tapply(matpks$rtmax,matpks$Pk,quantile,.75)-parDeco$psdrt*2
+      abline(v=vm,col=cols2[names(vm)],lty=2,lwd=2)
+      vm=tapply(matpks$rtmin,matpks$Pk,quantile,.25)+parDeco$psdrt*2
+      abline(v=vm,col=cols2[names(vm)],lty=3,lwd=2)
+    }
+    if(!is.null(mpks)){
+      vm=mpks$pk.left+parDeco$psdrt*2
+      abline(v=vm,col=cols2[mpks$Pk],lty=2,lwd=2)
+      vm=mpks$pk.right-parDeco$psdrt*2
+      abline(v=vm,col=cols2[mpks$Pk],lty=2,lwd=2)
+    }
     abline(h=median(ylim)+(-n:n)*median(ylim)*10^-6,lty=2,col="grey")
     abline(v=xl,lty=2,col="grey")
     axis(2,at=ylim,las=2,pos=xl[1]);axis(1,at=xl,pos=ylim[1])
