@@ -190,7 +190,7 @@
     renmfv=round(m[,lcol2use,drop=F]%*%sv$v,3)
     renmfvnoise=round(sum(parDeco$minNoiseMS1*sv$v),3)
     
-  if(cor(rowSums(m[,lcol2use,drop=F]),renmfv)<0){
+  if(quantile(renmfv,.8)<0){
     renmfv=-renmfv
     renmfvnoise=-renmfvnoise
   }
@@ -202,7 +202,7 @@
  #  x=1:length(renmfv);y=renmfv;bsl=rebsl[[1]];bslscore=rebsl[[2]];minNoise = renmfvnoise;snr.thresh =1;span=nspan;v2alim = 0.8;span2 =span2
   
   pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],minNoise = renmfvnoise,snr.thresh =1,span=nspan,v2alim = 0.8,span2 =span2+2)
-  if(is.null(pks)){
+  if(nrow(pks)==0){
     if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
     return(NULL)
   }
@@ -421,9 +421,9 @@
     #iloc=which.max(v0[lx])
     l=which(v>(max(v)/20) & v>quantile(v,.2))
     llpks=.GRsplist(l,l,d=1.1)
-    llpksmax=suppressWarnings(which.max(sapply(llpks,function(x) max(v0[lx[x]],na.rm=T))))
-    if(length(llpksmax)){
-      llpks=llpks[[llpksmax]]
+    llpkmax=suppressWarnings(sapply(llpks,function(x) max(v0[lx[x]],na.rm=T)))
+    if(!all(is.infinite(llpkmax))){
+      llpks=llpks[[which.max(llpkmax)]]
       llpkslx=lx[llpks]
       allre[[i]]=data.frame(pk.loc=llpkslx[which.max(v0[llpkslx])],
                             pk.left=min(llpkslx),pk.right=max(llpkslx),
@@ -432,7 +432,7 @@
                             Sid=isid,tick.max=max(v0[llpkslx],na.rm=T),PkCl=currpk)
       next
     }
-    if(doPlot) cat("Missing in ",isid," ",currpk," in ",main,"\n",sep="",sep="")
+    if(doPlot) cat("Missing in ",isid," / ",currpk," in ",main,"\n",sep="")
   }
   if(any(!sapply(allre,is.null))){
     addpks=do.call("rbind",allre)
