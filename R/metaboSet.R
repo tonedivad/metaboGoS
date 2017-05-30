@@ -63,7 +63,7 @@ makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
   allmat=list(Method=imeth,Sid=lusampid,Analyte=annot$Analyte,Annot=annot,Meta=metadf,File=filedf,Data=alldata)
   if(!is.null(eicdef)){
     eicdef=data.frame(PkId=paste0(eicdef$RoiId,";;",eicdef$Pk),eicdef)
-    eicdef=eicdef[,names(eicdef)%in%c('pk.span','pk.cl','Pk')]
+    eicdef=eicdef[,!names(eicdef)%in%c('pk.span','pk.cl','Pk')]
     allmat$EicDef=eicdef
   }
   
@@ -72,8 +72,8 @@ makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
 }
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-#' @name mmapMS2toMetaboSet
-#' @title mmapMS2toMetaboSet
+#' @name mapMS2toMetaboSet
+#' @title mapMS2toMetaboSet
 #' 
 #' stuff
 #'
@@ -89,6 +89,8 @@ makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
 mapMS2toMetaboSet<-function(cmb,fileres,dmz=0.001,dppm=2,rtwin=3/60,outfile=NULL){
   
   # dmz=0.001;dppm=2;rtwin=3/60
+  
+  fileres=fileres[file.exists(fileres)]
   
   pk2m=data.frame(Ana=cmb$Analyte,
                   rtmin=apply(cmb$Data$rtmin[names(fileres),],2,min,na.rm=T),
@@ -131,5 +133,7 @@ mapMS2toMetaboSet<-function(cmb,fileres,dmz=0.001,dppm=2,rtwin=3/60,outfile=NULL
   cat(" --> ",length(unique(cmbPrec2Ana$Analyte))," peaks, ", nrow(cmbPrec2Ana)," prec, ",length(unique(cmbPrec2Ana$SpId))," MS/MS\n",sep="")
   
   if(!is.null(outfile)) save(file=outfile,cmb,cmbPrec2Ana,cmbMS2Data)
+  
+  invisible(list(cmbPrec2Ana=cmbPrec2Ana,cmbMS2Data=cmbMS2Data))
   
 }

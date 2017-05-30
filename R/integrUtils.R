@@ -153,7 +153,7 @@
   tick.loc2=tick.loc2[!tick.loc2%in%tick.loc]
   if (length(tick.loc) == 0) return(data.frame())
   
-  ### remove valleys to close to each other
+  ### remove valleys to close to each other 
   ival<- which(index.min)
   l2merge=lapply(2:length(ival),function(i){
   #  if(!any(index.min[tick.loc[i-1]:tick.loc[i]])) return(c(tick.loc[i-1],tick.loc[i]))
@@ -162,11 +162,12 @@
   l2merge=l2merge[sapply(l2merge,length)>1]
   if(length(l2merge)>0){
     l2merge=.GRmergellx(l2merge)
-    for(i in l2merge) index.min[i[-which.min(bslscore[i])]]=FALSE
+    for(i in l2merge){
+      val2rm=i[-which.min(bslscore[i])]
+  #    pk2rm=which(tick.loc>=min(val))
+      index.min[val2rm]=FALSE
+    }  
   }
-  
-  
-  
   
   ### check if tick.lock have index.min
   if(length(tick.loc)>1){
@@ -185,8 +186,10 @@
   }
   
   ## if no valleys outside the tick.loc
-  if(min(tick.loc)<min(which(index.min))) index.min[max(which(rev(diff(y[rev(1:min(tick.loc))]))>0)-1,1)]=TRUE
-  if(max(tick.loc)>max(which(index.min))) index.min[max(max(tick.loc)+which(diff(y[max(tick.loc):length(y)])>0)[1],length(y))]=TRUE
+  if(min(tick.loc)<min(which(index.min))) index.min[max(which(rev(diff(y[rev(1:min(tick.loc))]))>0)-1,1,na.rm=T)]=TRUE
+  if(max(tick.loc)>max(which(index.min))) index.min[max(max(tick.loc)+which(diff(y[max(tick.loc):length(y)])>0)[1],length(y),na.rm=T)]=TRUE
+  
+  ## if no valleys between tick.loc??
   
   
   # 
@@ -197,7 +200,7 @@
   # 
   tick.left <- tick.right <- rep(NA, length(tick.loc))
   ## check left side
-  for (i in 1:length(tick.loc)) {
+  for (i in order(-bslscore[tick.loc],-y[tick.loc])) {
     llv=rev(which(index.min[1:tick.loc[i]]))
     if(i>1) llv=llv[llv>max(tick.loc[1:(i-1)])]
     if(length(llv)==1){tick.left[i]=llv;next}
@@ -219,7 +222,7 @@
   }
   
   ## check right side
-  for (i in 1:length(tick.loc)) {
+  for (i in order(-bslscore[tick.loc],-y[tick.loc])) {
     llv=which(index.min[tick.loc[i]:length(x)])+ tick.loc[i] - 1
     if(i<length(tick.loc)) llv=llv[llv<min(tick.loc[(i+1):length(tick.loc)])]
     if(length(llv)==1){tick.right[i]=llv;next}

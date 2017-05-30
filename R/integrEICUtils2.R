@@ -454,12 +454,19 @@
   matpks=matpks[order(matpks$Pk,matpks$Sid),]
   
   #### get the mz stats
-  tmp=matpks[matpks$InDeco==1,]
-  tmp=do.call("rbind",tapply(1:nrow(tmp),tmp$Pk,function(x){
-    data.frame(mzmed=suppressWarnings(round(matrixStats:::weightedMedian(tmp$mzmed,tmp$int.sm,na.rm=T),6)),
-               mzmin=round(min(tmp$mzmed),6),mzmax=round(max(tmp$mzmed),6))},simplify = FALSE))
+  tmp=matpks#[matpks$InDeco==1,]
+  tmp=do.call("rbind",tapply(1:nrow(matpks),matpks$Pk,function(x){
+    if(any(tmp$InDeco[x]==1)) x=x[which(matpks$InDeco[x]==1)]
+    data.frame(mzmed=suppressWarnings(round(matrixStats:::weightedMedian(matpks$mzmed[x],matpks$int.sm[x],na.rm=T),6)),
+               mzmin=round(min(matpks$mzmed[x]),6),mzmax=round(max(matpks$mzmed[x]),6))},simplify = FALSE))
   pks=data.frame(pks,tmp[match(pks$Pk,rownames(tmp)),])
   
+  ### relaballed pks
+  lu=unique(matpks$Pk)
+  pks=pks[pks$Pk%in%lu,]
+  
+  matpks$Pk=as.numeric(factor(matpks$Pk,levels = lu))
+  pks$Pk=as.numeric(factor(pks$Pk,levels = lu))
   
   
   

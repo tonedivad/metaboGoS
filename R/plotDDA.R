@@ -199,7 +199,7 @@ invisible(ms2inf2)
   abline(v=median(mzr),lty=2,col="grey")
   axis(1,xl,pos=0);axis(2,yl,las=2,pos=min(xl))
   points(sp[,c("mz","y2")],col=spcols[sp[,"sp"]],pch=16)
-  for(i in order(sp[,"y"])) segments(sp[i,"mz"],0,sp[i,"mz"],sp[i,"y2"],col=spcols[sp[i,"sp"]])
+  for(i in order(sp[,"y2"])) segments(sp[i,"mz"],0,sp[i,"mz"],sp[i,"y2"],col=spcols[sp[i,"sp"]])
   legend("top",as.character(round(ms2infos$RT,2)),bty="n",ncol=12,lwd=2,col=spcols)
   
   par(def.par)
