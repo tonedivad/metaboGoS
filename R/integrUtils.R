@@ -172,8 +172,10 @@
   ### check if tick.lock have index.min
   if(length(tick.loc)>1){
     l2merge=lapply(2:length(tick.loc),function(i){
-      if(!any(index.min[tick.loc[i-1]:tick.loc[i]])) return(c(tick.loc[i-1],tick.loc[i]))
-      if(max(min(y[tick.loc[i]:tick.loc[i-1]])/y[c(tick.loc[i],tick.loc[i-1])])>=v2alim & (tick.loc[i]-tick.loc[i-1])<2*span) return(c(tick.loc[i-1],tick.loc[i]))
+      if(!any(index.min[tick.loc[i-1]:tick.loc[i]]))
+        return(c(tick.loc[i-1],tick.loc[i]))
+      if(max(min(y[tick.loc[i]:tick.loc[i-1]])/y[c(tick.loc[i],tick.loc[i-1])])>=v2alim & (tick.loc[i]-tick.loc[i-1])<(span*2))
+        return(c(tick.loc[i-1],tick.loc[i]))
       c()})
     l2merge=l2merge[sapply(l2merge,length)>1]
     if(length(l2merge)>0){
@@ -274,29 +276,45 @@
     c(tick.loc = tick.loc[ix], tick.left = tick.left[ix], tick.right = tick.right[ix])
   }))
   
-  ### 
+ ###   ###   ###   ### 
   l2m=NULL
   if(!is.na(v2alim)){
     releft=y[pks[,2]]/y[pks[,1]]
     reright=y[pks[,3]]/y[pks[,1]]
     releft[1]=reright[length(reright)]=0
+    pkstyp=(releft>=v2alim | reright>=v2alim)*1 ## zeros if good peak
     l2mle=which(releft>=v2alim & abs(pks[,2]-pks[,1])<=(span2))
-    if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle)
+ #   l2mle=l2mle[pkscl[l2mle-1]==pkscl[l2mle]]
+    if(length(l2mle)>0) l2m=cbind(l2mle-1,l2mle,(pks[,1]-pks[,2])[l2mle])
     l2mri=which(reright>=v2alim & abs(pks[,3]-pks[,1])<=(span2))
-    if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1))
+   # l2mri=l2mri[pkscl[l2mri+1]==pkscl[l2mri]]
+    if(length(l2mri)>0) l2m=rbind(l2m,cbind(l2mri,l2mri+1,(pks[,3]-pks[,1])[l2mri]))
   }
   ##
   if(!is.null(l2m)){
-    l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,]))
-    pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
+    l2m=.GRmergellx(lapply(1:nrow(l2m),function(x) l2m[x,1:2]))
+    ## avoid merging 2 good peaks
+    lwithzer=which(sapply(l2m,function(i) sum(pkstyp[i]==0))>1)
+    if(length(lwithzer)>0){
+      for(i in lwithzer){
+        l=l2m[[i]]
+      l1=l[pkstyp[l]==1]
+      l0=l[pkstyp[l]==0]
+      lmin=apply(abs(outer(pks[l0,1],pks[l1,1],"-")),2,which.min)
+      torep=as.list(l0)
+      for(k in 1:length(l1)) torep[[lmin[[k]]]]=sort(c(torep[[lmin[[k]]]],l1[k]))
+      l2m[[i]]=torep
+      }
+      l2m=unlist(l2m,recursive = FALSE)
+    }
+     pks=rbind(pks,do.call("rbind",lapply(l2m,function(ix) c(pks[ix,1][which.max(y[pks[ix,1]])],range(pks[ix,2:3])))))
     pks=pks[-unlist(l2m),,drop=F]
     pks=pks[order(pks[,1]),,drop=F]
   }
   
-  
   ### comp cluster of peaks
   icl = 0
-  lcl = l = c()
+  pkscl = l = c()
   for (ix in 1:nrow(pks)) {
     if (any((pks[ix, 3]:pks[ix, 2]) %in% l)) {
       l = c(l, pks[ix, 3]:pks[ix, 2])
@@ -305,15 +323,18 @@
       l = pks[ix, 3]:pks[ix, 2]
       icl = icl + 1
     }
-    lcl = c(lcl, icl)
+    pkscl = c(pkscl, icl)
   }
+  
+  
+  
   pks = data.frame(pk.loc = x[pks[,1]],
                    pk.left = x[pks[, 2]],
                    pk.right = x[pks[,3]],
                    pk.snr = (y/bsl)[pks[, 1]],
                    pk.int = y[pks[, 1]], 
                    pk.span = x[pks[, 3]] - x[pks[, 2]])
-  pks$pk.cl = lcl
+  pks$pk.cl = pkscl
   
   
   return(pks)

@@ -155,7 +155,8 @@
   apks=list()
   for(isid in colnames(m)){
     # x=1:nrow(m);y=m[,isid];bsl = mbsl[,isid];bslscore = mbslsc[,isid];snr.thresh =parDeco$sbsl;  span=nspan;minNoise = minNoise*1.01;v2alim = 0.8
-    re=.MGsimpleIntegr2(x=1:nrow(m),y=m[,isid],bsl = mbsl[,isid],bslscore = mbslsc[,isid],snr.thresh =parDeco$sbslr,span=nspan,minNoise = minNoise*1.01,v2alim = 0.8,span2 = span2+2)
+    re=.MGsimpleIntegr2(x=1:nrow(m),y=m[,isid],bsl = mbsl[,isid],bslscore = mbslsc[,isid],snr.thresh =parDeco$sbslr,span=nspan,
+                        minNoise = minNoise*1.01,v2alim = 0.8,span2 = span2+2)
     if(nrow(re)==0) next
     re$Sid=isid
     apks[[isid]]=re
@@ -201,7 +202,8 @@
   
  #  x=1:length(renmfv);y=renmfv;bsl=rebsl[[1]];bslscore=rebsl[[2]];minNoise = renmfvnoise;snr.thresh =1;span=nspan;v2alim = 0.8;span2 =span2
   
-  pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],minNoise = renmfvnoise,snr.thresh =1,span=nspan,v2alim = 0.8,span2 =span2+2)
+  pks=.MGsimpleIntegr2(1:length(renmfv),renmfv,bsl=rebsl[[1]] ,bslscore=rebsl[[2]],minNoise = renmfvnoise,snr.thresh =1,
+                       span=nspan,v2alim = 0.8,span2 =span2+1)
   if(nrow(pks)==0){
     if(doPlot) .infctintegrplot(m,m0,parDeco,NULL,fac=10^6,rmz=range(mmz,na.rm=T),cols =colSa,sidsl = letSa,typs=typSa,main=main,v=renmfv)
     return(NULL)
