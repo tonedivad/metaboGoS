@@ -127,13 +127,14 @@ eicGather<-function(files,eics,conv2df=FALSE){
 #' @param parDeco par deco
 #' @param lsamp2use sample to use to compute stats
 #' @param minHeight minimum peak height in lsamp2use
+#' @param addrt extra padding around frames
 #' @param doPlot should it be plotted
 #' 
 #' @import matrixStats
 #' @import MASS
 #' @export
 
-eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHeightMS1,doPlot=T){
+eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHeightMS1,addrt=NULL,doPlot=T){
   
   
   .infctreframe<-function(eic,lsamp2use,parDeco,minHeight,addrt,doPlot,main=""){
@@ -160,10 +161,13 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
       }
       lusid=unique(ieic$Sid[ieic$y>=parDeco$minHeightMS1])
       ### loop over each sample
+      ncons=ifelse(is.null(parDeco$ncons),3,parDeco$ncons)
+      ppmcons=ifelse(is.null(parDeco$ppm2),parDeco$ppm,parDeco$ppm2)
+      minNoise=ifelse(is.null(parDeco$minHeightMS1cons),parDeco$minHeightMS1,parDeco$minHeightMS1cons)
       allre=NULL
       for(ii in lusid){
         l2=which(ieic$Sid== ii& ieic$y>parDeco$minHeightMS1)
-        llx<-.MGinquickSplit(ieic[l2,],ncons=3,dppm = parDeco$ppm,dmz=parDeco$dmz,minNoise=parDeco$minHeightMS1)[[1]]
+        llx<-.MGinquickSplit(ieic[l2,],ncons=ncons,dppm =ppmcons,dmz=parDeco$dmz,minNoise=minNoise)[[1]]
         if(length(llx)==0) next
         ldrmz=sapply(llx,function(x) diff(range(ieic[l2[x],"mz"])))
         l=which(ldrmz<=max(quantile(ldrmz,.75),mindmz))
@@ -222,8 +226,7 @@ eicGather2<-function(fileres,listRois,parDeco,lsamp2use,minHeight=parDeco$minHei
   aeics=aeics0=eicGather(fileres,listRois,conv2df = T)
   
   # (ix=names(aeics)[17])
-  
-  addrt=2*parDeco$psdrt*parDeco$span+parDeco$drt*2 ## add 0.5 minutes for bsl corr stuff
+  if(is.null(addrt))  addrt=2*parDeco$psdrt*parDeco$span+parDeco$drt*2 ## add 0.5 minutes for bsl corr stuff
   aeics=aeics0
   ## 1) first pass screening set of eics first
   llneic=list()

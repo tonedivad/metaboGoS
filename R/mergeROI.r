@@ -29,7 +29,9 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   currstats0=infctMRoi.compstats(matroi,indicatorVec)#,mzmin = "mzmin",mzmax = "mzmax")
   
   ## make sure there is no overlap for the frame min/max
-  re=infctMRoi.mergemzrt(currois0,currstats0,typ = indicatorVec[c("frmin","frmax")],indicatorVec,dppm = dppm,dmz=dmz/2)
+  # currrois = currois0;currstats = currstats0;typ = indicatorVec[c("frmin","frmax")];indicatorVec = indicatorVec;dppm = dppm;dmz=dmz/2;thrMZ=0.001;thrRT=0;maxiter=6
+  
+  re=infctMRoi.mergemzrt(currrois = currois0,currstats = currstats0,typ = indicatorVec[c("frmin","frmax")],indicatorVec = indicatorVec,dppm = dppm,dmz=dmz/2)
   if(!is.null(re)){currois0=re$rois;currstats0=re$st}
   cat(" --> step1: ",nrow(currstats0)," rois out of ",nrow(currois0),"\n",sep="")
   
@@ -41,7 +43,9 @@ mergeROIs<-function(matroi,dppm=2.5,dmz=0.001,lbw=seq(dppm*2,dppm/2,length.out =
   while(doLoop & iter<maxIter){
     iter=iter+1
     cat(iter,sep="")
-    re1=infctMRoi.mergeclosemz(crois,cstats,indicatorVec,thrMZ=dmz/2,dmz=dmz,dppm=dppm)
+    # currrois = crois;currstats = cstats;indicatorVec = indicatorVec;thrMZ=dmz/2;dmz=dmz;dppm=dppm
+    
+    re1=infctMRoi.mergeclosemz(currrois = crois,currstats = cstats,indicatorVec = indicatorVec,thrMZ=dmz/2,dmz=dmz,dppm=dppm)
     if(!is.null(re1)){
       crois=re1$rois[!duplicated(re1$rois),];cstats=re1$stats
       cat("-",nrow(crois)," ",sep="")
