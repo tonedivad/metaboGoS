@@ -18,22 +18,42 @@ makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
   
   ### define new metabolites
   newpkid=paste(matpks$RoiId,matpks$Pk,sep=";;")
-  l=which(matpks$InDeco==1)
+  cat(" *** ",length(unique(newpkid))," peaks and ",length(lusampid)," samples\n",sep="")
+  
+  l=which(matpks$InDeco==1) ## based on the good ones!
   newpkids=do.call("rbind",tapply(l,newpkid[l],function(x) 
     data.frame(PkId=newpkid[x][1],mz=matrixStats::weightedMedian(matpks[x,"mzmed"],matpks[x,"int.sm"]),
                rt=matrixStats::weightedMedian(matpks[x,"rt"],matpks[x,"int.sm"]))))
   newpkids$mz=round(newpkids$mz,6)
   newpkids$rt=round(newpkids$rt,3)
   
+  lmiss=unique(newpkid[!newpkid%in%newpkids$PkId])
+  if(length(lmiss)>0){
+    cat(" *** peaks not in deco: ", paste(lmiss,collapse=" "),"\n",sep="")
+    l=which(newpkid%in%lmiss)
+    newpkids2=do.call("rbind",tapply(l,newpkid[l],function(x) 
+      data.frame(PkId=newpkid[x][1],mz=matrixStats::weightedMedian(matpks[x,"mzmed"],matpks[x,"int.sm"]),
+                 rt=matrixStats::weightedMedian(matpks[x,"rt"],matpks[x,"int.sm"]))))
+    newpkids2$mz=round(newpkids2$mz,6)
+    newpkids2$rt=round(newpkids2$rt,3)
+    newpkids=rbind(newpkids,newpkids2)
+  }
+  newpkids=newpkids[order(newpkids$mz,newpkids$rt),]
+  
   ### Prep data
   pkid2sid=tapply(1:length(newpkid),newpkid,function(x) x[match(lusampid,matpks$Sid[x])])
   newpkids=newpkids[match(names(pkid2sid),newpkids$PkId),]
   newpkids$metnam=sprintf("%.5f@%.3f-%s",newpkids$mz,newpkids$rt,imeth)
   ldups=names(which(table(newpkids$metnam)>1))
- if(length(ldups)>0) for(idup in ldups){
+ if(length(ldups)>0){
+   cat(" *** ",length(ldups)," dups to fix:",sep="")
+   for(idup in ldups){
+     cat(idup)
   l=which(newpkids$metnam==idup)
   newpkids$metnam[l]=sprintf("%.5f-%d@%.3f-%s",newpkids$mz[l],1:length(l),newpkids$rt[l],imeth)
-}
+   }
+   cat("\n")
+ }
   lvars=names(matpks)[!names(matpks)%in%c("RoiId","Sid","Pk","PkCl")]
   lvars=lvars[sapply(lvars,function(i) is.numeric(matpks[,i]))]
   
@@ -62,8 +82,11 @@ makeMetaboSet<-function(matpks,eicdef=NULL,metainfos){
   
   allmat=list(Method=imeth,Sid=lusampid,Analyte=annot$Analyte,Annot=annot,Meta=metadf,File=filedf,Data=alldata)
   if(!is.null(eicdef)){
-    eicdef=data.frame(PkId=paste0(eicdef$RoiId,";;",eicdef$Pk),eicdef)
+    pkid=paste0(eicdef$RoiId,";;",eicdef$Pk)
+    eicdef=data.frame(Analyte=NA,PkId=pkid,eicdef)
     eicdef=eicdef[,!names(eicdef)%in%c('pk.span','pk.cl','Pk')]
+    eicdef=eicdef[match(annot$PkId,pkid),]
+    rownames(eicdef)=eicdef$Analyte=annot$Analyte
     allmat$EicDef=eicdef
   }
   
