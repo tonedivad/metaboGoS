@@ -160,3 +160,46 @@ mapMS2toMetaboSet<-function(cmb,fileres,dmz=0.001,dppm=2,rtwin=3/60,outfile=NULL
   invisible(list(cmbPrec2Ana=cmbPrec2Ana,cmbMS2Data=cmbMS2Data))
   
 }
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#' @name combMSetentries
+#' @title combMSetentries
+#' 
+#' stuff
+#'
+#' @param cmb metaboset
+#' @param ll2m entres to merge
+#' @return metaboSet
+#' @export
+combMSetentries<-function(icmb,ll2m){
+  
+ for(l2m in ll2m){
+ # icmb=deleteEntries(cmb,Analyte=cmb$Analyte[!cmb$Analyte%in%l2m],verbose = FALSE)
+  # c("rtmin","rtmax","RT","rtap","npts","MZ","mzmed","snr.sm","int.sm","Height","area.sm",  "area.bsl", "Area","InDeco")
+  
+  lmins=c("rtmin")
+  lmaxs=c("rtmax")
+  lsums=c("npts","area.sm",  "area.bsl", "Area")
+  iimaxs="Height"
+  limaxs=c("RT","rtap","MZ","snr.sm","int.sm","Height","InDeco","mzmed")
+  idmaxs=apply(icmb$Data[[iimaxs]][,l2m],1,function(x) ifelse(all(is.na(x)),NA,which.max(x)))
+  for(iset in limaxs) for(i in which(!is.na(idmaxs))) icmb$Data[[iset]][i,l2m]=icmb$Data[[iset]][i,l2m[idmaxs[i]]]
+  for(iset in lmaxs)    icmb$Data[[iset]][,l2m]=t(apply(icmb$Data[[iset]][,l2m],1,function(x) rep(ifelse(all(is.na(x)),NA,max(x)),length(x))))
+  for(iset in lmins)    icmb$Data[[iset]][,l2m]=t(apply(icmb$Data[[iset]][,l2m],1,function(x) rep(ifelse(all(is.na(x)),NA,min(x)),length(x))))
+  for(iset in lsums)    icmb$Data[[iset]][,l2m]=t(apply(icmb$Data[[iset]][,l2m],1,function(x) rep(ifelse(all(is.na(x)),NA,sum(x,na.rm=T)),length(x))))
+  icmb$Annot[l2m,]$RT=round(matrixStats::weightedMedian(icmb$Data$RT[,l2m[1]],icmb$Data$Height[,l2m[1]],na.rm = T),3)
+  icmb$Annot[l2m,]$MZ=round(matrixStats::weightedMedian(icmb$Data$MZ[,l2m[1]],icmb$Data$Height[,l2m[1]],na.rm = T),6)
+  pkid=strsplit(icmb$Annot[l2m,]$PkId,";;")
+  icmb$Annot[l2m,]$PkId=icmb$EicDef[l2m,]$PkId=paste0(pkid[[1]][1],";;",paste(sapply(pkid,function(x) x[2]),collapse="+"))
+  
+  imax=which.max(icmb$EicDef[l2m,]$pk.int)
+  for(i in c("pk.loc", "pk.snr","pk.int","PkCl" ,"mzmed")) icmb$EicDef[l2m,][,i]=icmb$EicDef[l2m,][imax,i]
+  for(i in c(  "pk.left", "mzmin")) icmb$EicDef[l2m,][,i]=min(icmb$EicDef[l2m,][,i])
+  for(i in c("pk.right","mzmax"))  icmb$EicDef[l2m,][,i]=max(icmb$EicDef[l2m,][,i])
+  newnam=sprintf("%.5f@%.3f-%s",icmb$Annot[l2m,]$MZ[1],icmb$Annot[l2m,]$RT[1],icmb$Annot[l2m,]$Method[1])
+  icmb=deleteEntries(icmb,Analyte=l2m[-1])
+  icmb=update(icmb,"Analyte",l2m[1],newnam)
+}
+  return(icmb)
+}

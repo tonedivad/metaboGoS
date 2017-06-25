@@ -5,7 +5,7 @@
 \title{Merge ROIs/EICs from several files not very fast plus pbs with duplicated roi at the end  and/or scan}
 \usage{
 eicGather2(fileres, listRois, parDeco, lsamp2use,
-  minHeight = parDeco$minHeightMS1, doPlot = T)
+  minHeight = parDeco$minHeightMS1, addrt = NULL, doPlot = T)
 }
 \arguments{
 \item{listRois}{ROI/EICs names to recoup across files}
@@ -15,6 +15,8 @@ eicGather2(fileres, listRois, parDeco, lsamp2use,
 \item{lsamp2use}{sample to use to compute stats}
 
 \item{minHeight}{minimum peak height in lsamp2use}
+
+\item{addrt}{extra padding around frames}
 
 \item{doPlot}{should it be plotted}
 
